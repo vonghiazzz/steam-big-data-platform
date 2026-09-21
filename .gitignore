@@ -1,0 +1,45 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Local / generated datasets
+data/raw/*
+!data/raw/selected_50_games.jsonl
+data/bronze/
+data/silver/
+data/gold/
+
+# Generated outputs
+output/
+
+# Spark local artifacts
+spark-warehouse/
+metastore_db/
+derby.log
+
+# Large data files
+*.parquet
+*.snappy.parquet
+
+# Logs
+*.log
+logs/
+
+# Local Kafka / MongoDB data
+kafka-data/
+mongodb-data/
