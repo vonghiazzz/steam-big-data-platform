@@ -180,7 +180,7 @@ near-real-time updates
 
 # 3. End-to-End Architecture
 
-![Steam Big Data End-to-End Architecture](docs/assets/steam-end-to-end-architecture.png)
+![Steam Big Data End-to-End Architecture](docs/assets/image.png)
 
 Hình trên mô tả shared data lake và downstream platform. Phần flow dưới đây là source of truth mới cho discovery, registry và polling. “Steam events” là event do hệ thống tạo sau khi polling phát hiện thay đổi; Steam không được giả định cung cấp native push stream.
 
