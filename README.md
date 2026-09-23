@@ -18,7 +18,7 @@ Hệ thống kết hợp:
 - MongoDB cho serving layer
 - Cluster / Cloud architecture cho khả năng scale
 
-> **Implementation status:** catalog discovery, qualification, initial 50-game selection, historical ingestion, validation, bronze-ready finalization, and HDFS Bronze verification are implemented. PySpark Bronze-to-Silver is the immediate next checkpoint. Dynamic registry automation, Kafka, Structured Streaming, MapReduce, Spark SQL/EDA, MLlib, and MongoDB serving remain planned or design-only unless later evidence states otherwise.
+> **Implementation status:** catalog discovery, configurable qualification, local JSONL registry reconciliation/onboarding planning, initial 50-game selection, historical ingestion, validation, bronze-ready finalization, and HDFS Bronze verification are implemented. PySpark Bronze-to-Silver is the immediate next checkpoint. Production registry automation, Kafka, Structured Streaming, MapReduce, Spark SQL/EDA, MLlib, and MongoDB serving remain planned or design-only unless later evidence states otherwise.
 
 Tài liệu kiến trúc chi tiết bắt đầu tại [Project Overview](docs/00_PROJECT_OVERVIEW.md) và [Architecture](docs/01_ARCHITECTURE.md).
 
@@ -222,6 +222,23 @@ Silver -> Gold -> Spark SQL / MLlib / MongoDB
 - **ACTIVE game:** incremental polling, detect changes và tạo event. Không full recrawl ở mỗi discovery cycle.
 
 Discovery/qualification là scope definition dựa trên metadata completeness, review availability/volume, crawl feasibility và diversity; không phải review cleaning/feature engineering và không dùng `voted_up` hoặc recommendation rate để chọn game.
+
+## Discovery Policy — Current Defaults
+
+| Setting | Default |
+|---|---:|
+| Game type | `game` |
+| Minimum release age | 30 days |
+| Minimum total reviews | 1,000 |
+| Metadata | required |
+| Review endpoint | required |
+| Historical sample | 500 reviews/game |
+| Initial research cohort | 50 games |
+| Maximum new games/cycle | 10 |
+| Discovery | `WEEKLY` |
+| Retries | 3 |
+
+Các ngưỡng nằm trong `config/discovery_policy.json` và có thể thay đổi mà không sửa thuật toán. `min_playtime_minutes` mặc định là `null` (tắt), vì playtime được giữ làm feature EDA/ML. Cohort 50 game hiện tại là research snapshot có thể tái lập, không phải giới hạn kiến trúc. Admin API/UI để quản lý policy là **Planned / Design-only**; kiến trúc end-to-end không thay đổi.
 
 Batch và Streaming **không phải hai hệ thống riêng biệt**. Cả hai hội tụ vào authoritative HDFS Bronze/Silver/Gold platform.
 
@@ -460,12 +477,15 @@ Processing bao gồm:
 
 ```text
 explicit schema
+parsing
+validation
 type casting
+timestamp conversion
 null handling
 key validation
 deduplication
-timestamp conversion
 normalization
+Bronze/Silver row-count reconciliation
 ```
 
 Output dự kiến:
@@ -477,6 +497,8 @@ Parquet
 ## 7.3 Gold Layer
 
 Gold là dữ liệu business-ready.
+
+Gold chịu trách nhiệm join/enrich Silver reviews với game metadata, tạo derived analytical fields, và xây dựng aggregate/business datasets cho analytics và ML. Các phép join/enrichment này không thuộc Bronze-to-Silver.
 
 Gold được chia thành hai nhóm chính.
 
@@ -590,7 +612,7 @@ games.appid = reviews.appid
 
 ---
 
-# 11. ETL with PySpark (Next / In Progress)
+# 11. ETL with PySpark (Next — Not Yet Implemented)
 
 Bronze-to-Silver PySpark chưa được triển khai trong repository. Đây là exact next engineering checkpoint.
 
@@ -606,30 +628,22 @@ Trong project:
 
 ```text
 HDFS Bronze
-      |
-      | Extract
-      v
-PySpark DataFrame
-      |
-      | Transform
-      v
-Schema
-Cleaning
-Validation
-Deduplication
-Join
-Derived Fields
-      |
-      | Load
-      v
-Silver / Gold Parquet
+-> PySpark explicit schema / parsing / validation
+-> cleaning / typing / timestamp conversion / null handling
+-> deduplication / key validation / normalization
+-> Silver Parquet
+
+Silver
+-> join and enrich reviews with game metadata
+-> derive analytical fields and aggregate business datasets
+-> Gold Analytics / Gold ML-ready
 ```
 
 PySpark là primary processing framework của project.
 
 ---
 
-# 12. Bronze to Silver (Next / In Progress)
+# 12. Bronze to Silver (Next — Not Yet Implemented)
 
 Main pipeline:
 
@@ -638,35 +652,28 @@ HDFS Bronze
     |
 Explicit Schema
     |
-Data Quality Validation
+Parsing
     |
-Deduplication
+Data Quality Validation
     |
 Type Casting
     |
 Timestamp Conversion
     |
+Null Handling
+    |
+Deduplication
+    |
 Key Validation
     |
+Normalization
+    |
 Silver Parquet
+    |
+Bronze/Silver Row-count Reconciliation
 ```
 
-Derived fields có thể bao gồm:
-
-```text
-playtime_hours
-price
-normalized genre
-normalized platform
-```
-
-Example:
-
-```text
-playtime_hours
-=
-playtime_at_review / 60
-```
+Bronze-to-Silver không phải stage join/enrich chính giữa reviews và game metadata. Nó tạo các dataset Silver sạch, typed, validated và replayable từ Bronze.
 
 ---
 
@@ -679,6 +686,14 @@ reviews.appid
 =
 games.appid
 ```
+
+Silver-to-Gold chịu trách nhiệm:
+
+- join/enrich reviews với game metadata
+- tạo derived analytical fields
+- tạo aggregate/business datasets
+- tạo analytics-ready datasets
+- tạo ML-ready datasets
 
 Gold Base dự kiến chứa:
 
@@ -704,6 +719,7 @@ Derived fields:
 
 ```text
 recommendation_label
+playtime_hours
 playtime_bucket
 price_bucket
 ```
@@ -1056,6 +1072,8 @@ Structured Streaming
 
 ## HDFS
 
+Status: HDFS Bronze storage/upload/verification is implemented. Silver and Gold storage are planned outputs of the next pipelines.
+
 Responsibilities:
 
 ```text
@@ -1106,6 +1124,8 @@ Partitions
 ---
 
 # 23. Monitoring & Fault Tolerance
+
+Status: **Planned / Design-only**, except monitoring and HDFS evidence already produced by implemented components.
 
 Monitoring / observability:
 
@@ -1227,13 +1247,14 @@ Chỉ measured experiment mới được ghi là implemented evidence.
 | Steam discovery | Done |
 | Catalog qualification | Done |
 | Initial 50-game research cohort | Done |
-| Dynamic Game Registry / Watchlist automation | Design-only |
+| Local JSONL Registry / onboarding plan V1 | Done |
+| Production Registry / Watchlist automation | Design-only |
 | Steam ingestion | Done |
 | Raw-data validation | Done |
 | Bronze-ready validation | Done |
 | HDFS Bronze | Done |
 | Project refactor | Done |
-| PySpark Bronze -> Silver | **Next / In Progress** |
+| PySpark Bronze -> Silver | **Next — not yet implemented** |
 | Silver -> Gold | Planned |
 | MapReduce aggregation | Planned |
 | Spark SQL / EDA | Planned |
@@ -1421,6 +1442,7 @@ Current completed components:
 ```text
 Steam discovery
 catalog qualification
+local registry reconciliation and onboarding planning
 game selection
 Steam ingestion
 raw validation
@@ -1436,7 +1458,7 @@ PySpark Bronze -> Silver
 Silver -> Gold
 MapReduce
 Spark SQL / EDA
-dynamic Game Registry / Watchlist automation
+production Game Registry / Watchlist automation
 ACTIVE-game incremental API polling / event producer
 Kafka / Structured Streaming
 Spark MLlib
@@ -1488,11 +1510,14 @@ Silver pipeline cần hoàn thành:
 
 ```text
 explicit schema
+parsing
 data-quality profiling
-deduplication
 type casting
 timestamp conversion
+null handling
+deduplication
 key validation
+normalization
 row-count reconciliation
 Parquet output
 ```

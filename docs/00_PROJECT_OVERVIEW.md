@@ -23,14 +23,15 @@ This snapshot supports reproducible EDA, ML, and MapReduce-versus-Spark validati
 
 | Area | Status | Current evidence or intent |
 |---|---|---|
-| Catalog discovery and qualification | **Implemented** | Steam candidates, metadata qualification, review-availability probing |
+| Catalog discovery and qualification | **Implemented** | Steam candidates, probes, versioned policy configuration, explainable evaluator |
+| Discovery Control Plane V1 | **Implemented** | Local JSONL registry, reconciliation, onboarding plan, run report |
 | Initial game selection | **Implemented** | Fixed 50-game research cohort |
 | Historical ingestion | **Implemented** | Review crawler and game-metadata preparation |
 | Landing and bronze-ready validation | **Implemented** | Validation and finalization scripts with reconciliation |
 | HDFS Bronze upload and verification | **Implemented** | Raw selected-scope data verified under HDFS Bronze |
 | PySpark Bronze-to-Silver | **In Progress / next checkpoint** | Implementation file does not yet exist |
 | Silver-to-Gold, MapReduce, Spark SQL / EDA | **Planned** | Designs documented in this folder |
-| Dynamic registry automation | **Design-only** | Current snapshot can seed a future registry |
+| Production registry automation | **Design-only** | Local V1 exists; database service and scheduler are not implemented |
 | Kafka and Structured Streaming | **Design-only** | Incremental polling/event path is not implemented |
 | Spark MLlib and MongoDB serving | **Planned** | Depend on validated Silver/Gold datasets |
 

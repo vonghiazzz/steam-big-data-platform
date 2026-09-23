@@ -8,8 +8,9 @@ Steam is not assumed to provide a native push event stream. Near-real-time behav
 
 ```text
 ACTIVE games
--> Event Producer / Steam API polling
+-> Steam API polling
 -> change detection
+-> Event Producer
 -> Kafka topic: steam_events
        +-> raw event archive -> HDFS Bronze/stream_events
        +-> Spark Structured Streaming -> Silver -> incremental Gold
@@ -36,6 +37,8 @@ The producer should also carry an observed/ingestion time and schema version. Ka
 2. **Structured Streaming consumer:** parse the explicit schema, validate keys/types, apply event-time logic and deduplication, then merge accepted changes into compatible Silver records.
 
 Archival must not depend on the analytical stream completing successfully. Conversely, replaying archived events must not create duplicate logical Silver/Gold records.
+
+Only registry entries already in `ACTIVE` participate in this path. Newly qualified games first complete historical backfill, integrity validation, Bronze verification, and the transition to `ACTIVE`. Weekly discovery does not trigger full recrawls of existing `ACTIVE` games.
 
 ## Stateful processing and reliability
 

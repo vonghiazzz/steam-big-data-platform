@@ -48,13 +48,37 @@
 
 **Reason:** Dynamic discovery and streaming updates must not silently change training/evaluation data behind published metrics.
 
-## ADR-009 — Discovery is scope control, not cleaning or target optimization
+## ADR-009 — Qualification thresholds are configuration
 
-**Decision:** Qualification may use metadata completeness, review availability, feasibility, genre, and popularity diversity, but not `voted_up` or recommendation-rate outcomes.
+**Decision:** Qualification thresholds and operational onboarding values are versioned configuration, not hard-coded business logic.
 
-**Reason:** Keeping target outcomes out of selection reduces analytical/ML selection bias and preserves a clear pipeline boundary.
+**Reason:** Discovery rules must be changeable and attributable to a policy version without rewriting the evaluator.
 
-## ADR-010 — One-time backfill and routine polling are separate operations
+## ADR-010 — Playtime is not a default qualification rule
+
+**Decision:** `min_playtime_minutes` is disabled (`null`) by default; playtime greater than two hours is not required for eligibility.
+
+**Reason:** Playtime is an important analytical and ML feature. Pre-filtering it would distort the research population and downstream relationships.
+
+## ADR-011 — Policy updates are non-retroactive by default
+
+**Decision:** A new qualification policy applies to future discovery/onboarding and does not automatically remove existing `ACTIVE` games.
+
+**Reason:** Operational continuity and reproducibility require explicit, auditable re-evaluation rather than silent status changes.
+
+## ADR-012 — Eligibility volume differs from sampling volume
+
+**Decision:** A game needs at least 1,000 available reviews to qualify, while 500 reviews/game is the current historical research sampling/backfill target.
+
+**Reason:** The first value proves source eligibility; the second controls the fixed 50-game, 25,000-review experiment size.
+
+## ADR-013 — Discovery is scope control, not cleaning or target optimization
+
+**Decision:** Qualification may use metadata completeness, release age, review availability/volume, and source feasibility, but not `voted_up`, recommendation rate, or positive/negative ratio.
+
+**Reason:** Keeping target outcomes out of qualification reduces analytical/ML selection bias and preserves a clear pipeline boundary.
+
+## ADR-014 — One-time backfill and routine polling are separate operations
 
 **Decision:** An `ACTIVE` game is not fully recrawled on each discovery cycle. Full rebuild/backfill is explicit and auditable.
 

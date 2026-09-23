@@ -11,10 +11,11 @@ from steam.common.jsonl import (
     read_jsonl,
     write_jsonl,
 )
+from steam.discovery.policy import (
+    DEFAULT_POLICY_PATH,
+    load_discovery_policy,
+)
 
-
-MIN_TOTAL_REVIEWS = 1000
-MIN_CLASS_TOTAL = 100
 
 PREFERRED_QUOTAS = {
     "LOW": 10,
@@ -60,10 +61,34 @@ def primary_genre(
 
 def qualify_games(
     rows: list[dict],
+    min_total_reviews: int | None = None,
 ) -> list[dict]:
+    if min_total_reviews is None:
+        min_total_reviews = (
+            load_discovery_policy()
+            .qualification
+            .min_total_reviews
+        )
+
     qualified = []
 
     for row in rows:
+        qualification = row.get(
+            "qualification"
+        )
+
+        if (
+            isinstance(
+                qualification,
+                dict,
+            )
+            and qualification.get(
+                "qualified"
+            )
+            is not True
+        ):
+            continue
+
         summary = (
             row.get(
                 "query_summary"
@@ -94,19 +119,7 @@ def qualify_games(
 
         if (
             total_reviews
-            < MIN_TOTAL_REVIEWS
-        ):
-            continue
-
-        if (
-            total_positive
-            < MIN_CLASS_TOTAL
-        ):
-            continue
-
-        if (
-            total_negative
-            < MIN_CLASS_TOTAL
+            < min_total_reviews
         ):
             continue
 
@@ -633,6 +646,12 @@ def main():
         ),
     )
 
+    parser.add_argument(
+        "--policy-path",
+        type=Path,
+        default=DEFAULT_POLICY_PATH,
+    )
+
     args = (
         parser.parse_args()
     )
@@ -641,9 +660,17 @@ def main():
         args.input_path
     )
 
+    policy = load_discovery_policy(
+        args.policy_path
+    )
+
     qualified = (
         qualify_games(
-            rows
+            rows,
+            min_total_reviews=(
+                policy.qualification
+                .min_total_reviews
+            ),
         )
     )
 

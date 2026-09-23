@@ -8,18 +8,21 @@ The historical batch path is implemented through verified HDFS Bronze. PySpark B
 
 For the current experiment, `selected_50_games.jsonl` drives game-metadata preparation and review crawling. The crawler preserves source-near records by game and retains raw API pages for replay/debugging. Landing validation checks expected games, counts, identifiers, language, labels, and duplicates. Bronze-ready finalization produces a reproducible 50-game × 500-review handoff before HDFS upload.
 
-In the scalable design, the same historical path applies to each qualified `NEW` registry entry:
+In the scalable design, the same historical path applies only to each qualified `NEW` registry entry:
 
 ```text
 NEW game
 -> Python historical backfill
 -> raw Steam API records
--> local landing/validation
+-> Ingestion Integrity Validation
 -> HDFS Bronze
--> mark ACTIVE only after successful reconciliation
+-> verification/reconciliation
+-> mark ACTIVE
 ```
 
-Historical records are not analytically cleaned before Bronze. Scope filtering and completeness validation do not change Bronze’s raw/replayable role.
+Ingestion Integrity Validation checks transport and structural integrity such as readable responses, parseable JSON, expected AppIDs, files, completeness, counts, and supported checksums. Historical records are not analytically cleaned before Bronze. Outlier handling, normalization, feature engineering, aggregation, and ML filtering belong after Bronze.
+
+An existing `ACTIVE` game is handled by incremental polling and must not receive another full historical crawl during each weekly discovery cycle. A deliberate repair or rebuild is a separate auditable operation.
 
 ## Bronze to Silver — next checkpoint
 

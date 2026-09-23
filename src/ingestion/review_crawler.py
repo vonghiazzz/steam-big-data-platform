@@ -10,9 +10,13 @@ import requests
 from steam.common.config import (
     LANDING_ROOT,
     SELECTED_GAMES_PATH,
-    TARGET_REVIEWS_PER_GAME,
 )
 from steam.common.jsonl import read_jsonl
+from steam.discovery.policy import (
+    DEFAULT_POLICY_PATH,
+    RetryPolicy,
+    load_discovery_policy,
+)
 
 
 BASE_URL = (
@@ -114,7 +118,14 @@ def request_review_page(
     session,
     appid,
     cursor,
+    retry_policy=None,
 ):
+    if retry_policy is None:
+        retry_policy = (
+            load_discovery_policy()
+            .retry
+        )
+
     url = BASE_URL.format(
         appid=appid
     )
@@ -130,17 +141,36 @@ def request_review_page(
         "filter_offtopic_activity": 1,
     }
 
-    max_attempts = 3
-
     for attempt in range(
         1,
-        max_attempts + 1,
+        retry_policy.max_attempts + 1,
     ):
-        response = session.get(
-            url,
-            params=params,
-            timeout=30,
-        )
+        try:
+            response = session.get(
+                url,
+                params=params,
+                timeout=30,
+            )
+        except requests.RequestException as exc:
+            if attempt >= retry_policy.max_attempts:
+                raise RuntimeError(
+                    "Steam request failed after "
+                    f"{retry_policy.max_attempts} attempts."
+                ) from exc
+
+            wait_seconds = retry_wait_seconds(
+                attempt,
+                retry_policy,
+            )
+
+            print()
+            print(
+                "Network error. "
+                f"Retry in {wait_seconds}s..."
+            )
+
+            time.sleep(wait_seconds)
+            continue
 
         if response.status_code == 200:
             payload = response.json()
@@ -168,7 +198,10 @@ def request_review_page(
                 )
             )
 
-            wait_seconds = 60
+            wait_seconds = retry_wait_seconds(
+                attempt,
+                retry_policy,
+            )
 
             if (
                 retry_after
@@ -184,15 +217,17 @@ def request_review_page(
                 f"Waiting {wait_seconds}s..."
             )
 
-            time.sleep(
-                wait_seconds
-            )
+            if attempt < retry_policy.max_attempts:
+                time.sleep(
+                    wait_seconds
+                )
 
             continue
 
         if response.status_code >= 500:
-            wait_seconds = (
-                attempt * 10
+            wait_seconds = retry_wait_seconds(
+                attempt,
+                retry_policy,
             )
 
             print()
@@ -203,9 +238,10 @@ def request_review_page(
                 f"{wait_seconds}s..."
             )
 
-            time.sleep(
-                wait_seconds
-            )
+            if attempt < retry_policy.max_attempts:
+                time.sleep(
+                    wait_seconds
+                )
 
             continue
 
@@ -213,8 +249,17 @@ def request_review_page(
 
     raise RuntimeError(
         f"Failed after "
-        f"{max_attempts} attempts."
+        f"{retry_policy.max_attempts} attempts."
     )
+
+
+def retry_wait_seconds(
+    attempt: int,
+    retry_policy: RetryPolicy,
+) -> int:
+    if retry_policy.exponential_backoff:
+        return 2 ** attempt
+    return 2
 
 
 def save_raw_page(
@@ -270,7 +315,14 @@ def crawl_game(
     pages_root,
     state_path,
     state,
+    retry_policy=None,
 ):
+    if retry_policy is None:
+        retry_policy = (
+            load_discovery_policy()
+            .retry
+        )
+
     appid = game["appid"]
     name = game["name"]
 
@@ -365,6 +417,7 @@ def crawl_game(
                 session,
                 appid,
                 request_cursor,
+                retry_policy,
             )
         )
 
@@ -586,8 +639,22 @@ def main():
     parser.add_argument(
         "--target-reviews",
         type=int,
-        default=(
-            TARGET_REVIEWS_PER_GAME
+        default=None,
+    )
+
+    parser.add_argument(
+        "--policy-path",
+        type=Path,
+        default=DEFAULT_POLICY_PATH,
+    )
+
+    parser.add_argument(
+        "--games-path",
+        type=Path,
+        default=SELECTED_GAMES_PATH,
+        help=(
+            "JSONL game input. Defaults to the fixed research snapshot; "
+            "a discovery onboarding queue may be supplied explicitly."
         ),
     )
 
@@ -613,6 +680,16 @@ def main():
         parser.parse_args()
     )
 
+    policy = load_discovery_policy(
+        args.policy_path
+    )
+
+    if args.target_reviews is None:
+        args.target_reviews = (
+            policy.onboarding
+            .target_reviews_per_game
+        )
+
     if args.target_reviews <= 0:
         parser.error(
             "--target-reviews "
@@ -635,7 +712,7 @@ def main():
         )
 
     games = read_jsonl(
-        SELECTED_GAMES_PATH
+        args.games_path
     )
 
     if args.max_games is not None:
@@ -705,6 +782,16 @@ def main():
         args.delay,
     )
 
+    print(
+        "Policy version      :",
+        policy.version,
+    )
+
+    print(
+        "Max retry attempts  :",
+        policy.retry.max_attempts,
+    )
+
     total_stored = 0
 
     for index, game in enumerate(
@@ -718,24 +805,70 @@ def main():
             f"{index}/{len(games)}]"
         )
 
-        count = crawl_game(
-            session=session,
-            game=game,
-            target_reviews=(
-                args.target_reviews
-            ),
-            delay=args.delay,
-            reviews_root=(
-                reviews_root
-            ),
-            pages_root=(
-                pages_root
-            ),
-            state_path=(
-                state_path
-            ),
-            state=state,
-        )
+        try:
+            count = crawl_game(
+                session=session,
+                game=game,
+                target_reviews=(
+                    args.target_reviews
+                ),
+                delay=args.delay,
+                reviews_root=(
+                    reviews_root
+                ),
+                pages_root=(
+                    pages_root
+                ),
+                state_path=(
+                    state_path
+                ),
+                state=state,
+                retry_policy=(
+                    policy.retry
+                ),
+            )
+        except Exception as exc:
+            game_key = str(
+                game["appid"]
+            )
+
+            failed_state = dict(
+                state["games"].get(
+                    game_key,
+                    {},
+                )
+            )
+
+            failed_state.update(
+                {
+                    "appid": game["appid"],
+                    "name": game["name"],
+                    "status": "FAILED",
+                    "error": str(exc),
+                    "policy_version": (
+                        policy.version
+                    ),
+                    "updated_at": utc_now(),
+                }
+            )
+
+            state["games"][
+                game_key
+            ] = failed_state
+
+            save_state(
+                state_path,
+                state,
+            )
+
+            print(
+                "FAILED game; continuing:",
+                game["appid"],
+                "|",
+                exc,
+            )
+
+            continue
 
         total_stored += (
             count

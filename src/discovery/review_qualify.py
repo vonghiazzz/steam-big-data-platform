@@ -13,6 +13,12 @@ from steam.common.jsonl import (
     read_jsonl,
     write_jsonl,
 )
+from steam.discovery.policy import (
+    DEFAULT_POLICY_PATH,
+    GameQualificationInput,
+    evaluate_qualification,
+    load_discovery_policy,
+)
 
 
 BASE_URL = (
@@ -61,7 +67,12 @@ def qualify_reviews(
     input_path: Path,
     output_path: Path,
     delay: float,
+    policy_path: Path = DEFAULT_POLICY_PATH,
 ) -> None:
+    policy = load_discovery_policy(
+        policy_path
+    )
+
     games = read_jsonl(
         input_path
     )
@@ -156,6 +167,54 @@ def qualify_reviews(
                 "success"
             ) != 1:
                 failed_count += 1
+
+                qualification = (
+                    evaluate_qualification(
+                        GameQualificationInput(
+                            appid=appid,
+                            app_type=game.get(
+                                "type"
+                            ),
+                            release_date=(
+                                game.get(
+                                    "release_date"
+                                )
+                            ),
+                            total_reviews=None,
+                            metadata_available=True,
+                            review_endpoint_available=False,
+                        ),
+                        policy.qualification,
+                        policy_version=(
+                            policy.version
+                        ),
+                    )
+                )
+
+                results.append(
+                    {
+                        "catalog_rank": (
+                            game.get(
+                                "catalog_rank"
+                            )
+                        ),
+                        "appid": appid,
+                        "name": name,
+                        "type": game.get(
+                            "type"
+                        ),
+                        "release_date": (
+                            game.get(
+                                "release_date"
+                            )
+                        ),
+                        "query_summary": {},
+                        "qualification": (
+                            qualification
+                            .to_dict()
+                        ),
+                    }
+                )
 
                 print(
                     "→ success="
@@ -282,6 +341,9 @@ def qualify_reviews(
                 ),
                 "appid": appid,
                 "name": name,
+                "type": game.get(
+                    "type"
+                ),
                 "genres": (
                     game.get(
                         "genres",
@@ -325,6 +387,37 @@ def qualify_reviews(
                     query_summary
                 ),
             }
+
+            qualification = (
+                evaluate_qualification(
+                    GameQualificationInput(
+                        appid=appid,
+                        app_type=game.get(
+                            "type"
+                        ),
+                        release_date=(
+                            game.get(
+                                "release_date"
+                            )
+                        ),
+                        total_reviews=(
+                            query_summary.get(
+                                "total_reviews"
+                            )
+                        ),
+                        metadata_available=True,
+                        review_endpoint_available=True,
+                    ),
+                    policy.qualification,
+                    policy_version=(
+                        policy.version
+                    ),
+                )
+            )
+
+            result[
+                "qualification"
+            ] = qualification.to_dict()
 
             results.append(
                 result
@@ -485,6 +578,12 @@ def main():
         ),
     )
 
+    parser.add_argument(
+        "--policy-path",
+        type=Path,
+        default=DEFAULT_POLICY_PATH,
+    )
+
     args = (
         parser.parse_args()
     )
@@ -502,6 +601,9 @@ def main():
             args.output_path
         ),
         delay=args.delay,
+        policy_path=(
+            args.policy_path
+        ),
     )
 
 

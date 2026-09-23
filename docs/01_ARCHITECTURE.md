@@ -56,7 +56,7 @@ Steam supplies catalog information, game metadata, reviews, and mutable attribut
 
 Periodic discovery identifies candidates. Qualification checks metadata completeness, review availability/volume, crawl feasibility, and diversity needs. This stage defines managed scope; it is not review cleaning, normalization, or feature engineering, and it must not select games using the ML outcome (`voted_up` or recommendation rate).
 
-The Game Registry / Watchlist is the scalable control plane. `selected_50_games.jsonl` is the implemented initial research snapshot and a future registry seed, not a permanent maximum.
+The Game Registry / Watchlist is the scalable control plane. A local JSONL registry, reconciliation step, onboarding plan, and run report are implemented for V1. `selected_50_games.jsonl` is the immutable initial research snapshot and registry seed, not a permanent maximum.
 
 ## Dynamic game onboarding
 
@@ -64,7 +64,7 @@ The Game Registry / Watchlist is the scalable control plane. `selected_50_games.
 - **ACTIVE game:** poll incrementally, compare source state with known state, and create events for changes. Do not repeat a full historical crawl every discovery cycle.
 - **PAUSED / RETIRED game:** optional operational states that stop normal polling while preserving history and registry lineage.
 
-Registry automation is currently **Design-only**. The fixed 50-game cohort is **Implemented**.
+Local Discovery Control Plane V1 is **Implemented**. A production registry database/service, scheduler, and concurrent workers remain **Design-only**. The fixed 50-game cohort is **Implemented** and unchanged.
 
 ## Processing paths
 

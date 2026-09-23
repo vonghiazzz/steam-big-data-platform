@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "qualification": {
+    "app_type": "game",
+    "min_release_age_days": 30,
+    "min_total_reviews": 1000,
+    "require_metadata": true,
+    "require_review_endpoint": true,
+    "min_playtime_minutes": null
+  },
+  "onboarding": {
+    "target_reviews_per_game": 500,
+    "max_new_games_per_cycle": 10
+  },
+  "discovery": {
+    "frequency": "WEEKLY"
+  },
+  "retry": {
+    "max_attempts": 3,
+    "exponential_backoff": true
+  }
+}
