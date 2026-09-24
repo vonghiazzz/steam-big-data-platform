@@ -1,0 +1,94 @@
+# HDFS Bronze inventory  (2026-09-24T09:13:59Z, container=bda501-namenode)
+
+$ hdfs dfs -ls -h /steam/bronze/games
+Found 1 items
+-rw-r--r--   1 hadoop supergroup      1.4 M 2026-09-24 09:13 /steam/bronze/games/games_raw.jsonl
+
+$ hdfs dfs -ls -h /steam/bronze/reviews
+Found 50 items
+-rw-r--r--   1 hadoop supergroup    619.0 K 2026-09-24 09:13 /steam/bronze/reviews/1049590.jsonl
+-rw-r--r--   1 hadoop supergroup    558.5 K 2026-09-24 09:13 /steam/bronze/reviews/1085660.jsonl
+-rw-r--r--   1 hadoop supergroup    564.2 K 2026-09-24 09:13 /steam/bronze/reviews/108600.jsonl
+-rw-r--r--   1 hadoop supergroup    582.1 K 2026-09-24 09:13 /steam/bronze/reviews/1086940.jsonl
+-rw-r--r--   1 hadoop supergroup    609.8 K 2026-09-24 09:13 /steam/bronze/reviews/1091500.jsonl
+-rw-r--r--   1 hadoop supergroup    586.1 K 2026-09-24 09:13 /steam/bronze/reviews/1142710.jsonl
+-rw-r--r--   1 hadoop supergroup    593.4 K 2026-09-24 09:13 /steam/bronze/reviews/1144200.jsonl
+-rw-r--r--   1 hadoop supergroup    628.9 K 2026-09-24 09:13 /steam/bronze/reviews/1151340.jsonl
+-rw-r--r--   1 hadoop supergroup    532.9 K 2026-09-24 09:13 /steam/bronze/reviews/1172470.jsonl
+-rw-r--r--   1 hadoop supergroup    825.1 K 2026-09-24 09:13 /steam/bronze/reviews/1285190.jsonl
+-rw-r--r--   1 hadoop supergroup    591.4 K 2026-09-24 09:13 /steam/bronze/reviews/1286830.jsonl
+-rw-r--r--   1 hadoop supergroup    915.3 K 2026-09-24 09:13 /steam/bronze/reviews/1295660.jsonl
+-rw-r--r--   1 hadoop supergroup    618.1 K 2026-09-24 09:13 /steam/bronze/reviews/1361210.jsonl
+-rw-r--r--   1 hadoop supergroup    729.0 K 2026-09-24 09:13 /steam/bronze/reviews/1643320.jsonl
+-rw-r--r--   1 hadoop supergroup    546.6 K 2026-09-24 09:13 /steam/bronze/reviews/1973530.jsonl
+-rw-r--r--   1 hadoop supergroup    712.2 K 2026-09-24 09:13 /steam/bronze/reviews/2054970.jsonl
+-rw-r--r--   1 hadoop supergroup    628.8 K 2026-09-24 09:13 /steam/bronze/reviews/2246340.jsonl
+-rw-r--r--   1 hadoop supergroup    555.5 K 2026-09-24 09:13 /steam/bronze/reviews/2357570.jsonl
+-rw-r--r--   1 hadoop supergroup    539.4 K 2026-09-24 09:13 /steam/bronze/reviews/236390.jsonl
+-rw-r--r--   1 hadoop supergroup    612.4 K 2026-09-24 09:13 /steam/bronze/reviews/2399420.jsonl
+-rw-r--r--   1 hadoop supergroup    601.9 K 2026-09-24 09:13 /steam/bronze/reviews/2399830.jsonl
+-rw-r--r--   1 hadoop supergroup    652.6 K 2026-09-24 09:13 /steam/bronze/reviews/2456740.jsonl
+-rw-r--r--   1 hadoop supergroup    775.6 K 2026-09-24 09:13 /steam/bronze/reviews/2483190.jsonl
+-rw-r--r--   1 hadoop supergroup    616.5 K 2026-09-24 09:13 /steam/bronze/reviews/2537590.jsonl
+-rw-r--r--   1 hadoop supergroup    555.4 K 2026-09-24 09:13 /steam/bronze/reviews/2767030.jsonl
+-rw-r--r--   1 hadoop supergroup    608.3 K 2026-09-24 09:13 /steam/bronze/reviews/2807960.jsonl
+-rw-r--r--   1 hadoop supergroup    532.8 K 2026-09-24 09:13 /steam/bronze/reviews/284160.jsonl
+-rw-r--r--   1 hadoop supergroup    564.7 K 2026-09-24 09:13 /steam/bronze/reviews/289070.jsonl
+-rw-r--r--   1 hadoop supergroup    598.5 K 2026-09-24 09:13 /steam/bronze/reviews/3028330.jsonl
+-rw-r--r--   1 hadoop supergroup    599.7 K 2026-09-24 09:13 /steam/bronze/reviews/304390.jsonl
+-rw-r--r--   1 hadoop supergroup    548.6 K 2026-09-24 09:13 /steam/bronze/reviews/3405690.jsonl
+-rw-r--r--   1 hadoop supergroup    586.1 K 2026-09-24 09:13 /steam/bronze/reviews/3595270.jsonl
+-rw-r--r--   1 hadoop supergroup    582.5 K 2026-09-24 09:13 /steam/bronze/reviews/376210.jsonl
+-rw-r--r--   1 hadoop supergroup    575.0 K 2026-09-24 09:13 /steam/bronze/reviews/381210.jsonl
+-rw-r--r--   1 hadoop supergroup    551.5 K 2026-09-24 09:13 /steam/bronze/reviews/394360.jsonl
+-rw-r--r--   1 hadoop supergroup    504.4 K 2026-09-24 09:13 /steam/bronze/reviews/4000.jsonl
+-rw-r--r--   1 hadoop supergroup    646.0 K 2026-09-24 09:13 /steam/bronze/reviews/4032350.jsonl
+-rw-r--r--   1 hadoop supergroup    528.2 K 2026-09-24 09:13 /steam/bronze/reviews/413150.jsonl
+-rw-r--r--   1 hadoop supergroup    510.2 K 2026-09-24 09:13 /steam/bronze/reviews/431960.jsonl
+-rw-r--r--   1 hadoop supergroup    602.6 K 2026-09-24 09:13 /steam/bronze/reviews/4356430.jsonl
+-rw-r--r--   1 hadoop supergroup    543.4 K 2026-09-24 09:13 /steam/bronze/reviews/438100.jsonl
+-rw-r--r--   1 hadoop supergroup    674.9 K 2026-09-24 09:13 /steam/bronze/reviews/440900.jsonl
+-rw-r--r--   1 hadoop supergroup    592.7 K 2026-09-24 09:13 /steam/bronze/reviews/489830.jsonl
+-rw-r--r--   1 hadoop supergroup    674.1 K 2026-09-24 09:13 /steam/bronze/reviews/534380.jsonl
+-rw-r--r--   1 hadoop supergroup    529.6 K 2026-09-24 09:13 /steam/bronze/reviews/570.jsonl
+-rw-r--r--   1 hadoop supergroup    526.3 K 2026-09-24 09:13 /steam/bronze/reviews/578080.jsonl
+-rw-r--r--   1 hadoop supergroup    620.5 K 2026-09-24 09:13 /steam/bronze/reviews/594650.jsonl
+-rw-r--r--   1 hadoop supergroup    538.4 K 2026-09-24 09:13 /steam/bronze/reviews/648800.jsonl
+-rw-r--r--   1 hadoop supergroup    520.7 K 2026-09-24 09:13 /steam/bronze/reviews/730.jsonl
+-rw-r--r--   1 hadoop supergroup    621.2 K 2026-09-24 09:13 /steam/bronze/reviews/949230.jsonl
+
+$ hdfs dfs -count -v /steam/bronze/games /steam/bronze/reviews
+   DIR_COUNT   FILE_COUNT       CONTENT_SIZE PATHNAME
+           1            1            1448027 /steam/bronze/games
+           1           50           30854764 /steam/bronze/reviews
+
+$ hdfs dfs -du -s -h /steam/bronze/games /steam/bronze/reviews
+1.4 M   1.4 M   /steam/bronze/games
+29.4 M  29.4 M  /steam/bronze/reviews
+
+$ hdfs fsck /steam/bronze -files -blocks | tail -25
+ Mis-replicated blocks:		0 (0.0 %)
+ Default replication factor:	1
+ Average block replication:	1.0
+ Missing blocks:		0
+ Corrupt blocks:		0
+ Missing replicas:		0 (0.0 %)
+ Blocks queued for replication:	0
+
+Erasure Coded Block Groups:
+ Total size:	0 B
+ Total files:	0
+ Total block groups (validated):	0
+ Minimally erasure-coded block groups:	0
+ Over-erasure-coded block groups:	0
+ Under-erasure-coded block groups:	0
+ Unsatisfactory placement block groups:	0
+ Average block group size:	0.0
+ Missing block groups:		0
+ Corrupt block groups:		0
+ Missing internal blocks:	0
+ Blocks queued for replication:	0
+FSCK ended at Thu Sep 24 09:14:03 UTC 2026 in 7 milliseconds
+
+
+The filesystem under path '/steam/bronze' is HEALTHY
