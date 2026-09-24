@@ -1,0 +1,362 @@
+{
+  "result": "PASS",
+  "target_reviews_per_game": 500,
+  "selected_games": 50,
+  "total_input_records": 25590,
+  "total_output_records": 25000,
+  "total_dropped_records": 590,
+  "duplicates_seen": 0,
+  "failures": [],
+  "games": [
+    {
+      "appid": 2357570,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 4032350,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 3595270,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 3028330,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 2399830,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 949230,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 4356430,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1285190,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1295660,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 3405690,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 2537590,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 578080,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 438100,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1151340,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 2399420,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1172470,
+      "input_records": 599,
+      "output_records": 500,
+      "dropped_records": 99,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 2456740,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1085660,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 381210,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 236390,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 2767030,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1144200,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 2807960,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 2246340,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 594650,
+      "input_records": 599,
+      "output_records": 500,
+      "dropped_records": 99,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1361210,
+      "input_records": 599,
+      "output_records": 500,
+      "dropped_records": 99,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 534380,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1142710,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 304390,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 376210,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 2054970,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1643320,
+      "input_records": 599,
+      "output_records": 500,
+      "dropped_records": 99,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 440900,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 730,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 4000,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1086940,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 413150,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1091500,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 284160,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 394360,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 289070,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1286830,
+      "input_records": 599,
+      "output_records": 500,
+      "dropped_records": 99,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1973530,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 1049590,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 570,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 431960,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 648800,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 108600,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 489830,
+      "input_records": 595,
+      "output_records": 500,
+      "dropped_records": 95,
+      "duplicates_seen": 0
+    },
+    {
+      "appid": 2483190,
+      "input_records": 500,
+      "output_records": 500,
+      "dropped_records": 0,
+      "duplicates_seen": 0
+    }
+  ]
+}
