@@ -1,14 +1,14 @@
 import json
 from collections import Counter
 
-from steam.common.config import (
+from common.config import (
     BRONZE_READY_REVIEWS_ROOT,
     BRONZE_READY_VALIDATION_REPORT_PATH,
     SELECTED_GAMES_PATH,
     TARGET_GAME_COUNT,
     TARGET_REVIEWS_PER_GAME,
 )
-from steam.common.jsonl import iter_jsonl
+from common.jsonl import iter_jsonl
 
 
 EXPECTED_TOTAL_REVIEWS = (

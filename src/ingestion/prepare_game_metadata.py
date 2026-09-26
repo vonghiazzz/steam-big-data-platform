@@ -2,13 +2,13 @@ import argparse
 import json
 from pathlib import Path
 
-from steam.common.config import (
+from common.config import (
     LANDING_GAMES_RAW_PATH,
     METADATA_PROBE_RAW_PATH,
     SELECTED_GAMES_PATH,
     TARGET_GAME_COUNT,
 )
-from steam.common.jsonl import iter_jsonl
+from common.jsonl import iter_jsonl
 
 
 def load_selected_appids() -> set[int]:

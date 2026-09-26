@@ -1,11 +1,11 @@
 import json
 
-from steam.common.config import (
+from common.config import (
     LANDING_STATE_PATH,
     SELECTED_GAMES_PATH,
     TARGET_GAME_COUNT,
 )
-from steam.common.jsonl import iter_jsonl
+from common.jsonl import iter_jsonl
 
 
 def main():

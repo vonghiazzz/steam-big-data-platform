@@ -1,0 +1,14 @@
+mapreduce.jobhistory.intermediate-done-dir: /mr-history/tmp
+mapreduce.map.memory.mb: 512
+yarn.app.mapreduce.am.env: HADOOP_MAPRED_HOME=/opt/hadoop
+mapreduce.application.classpath: /opt/hadoop/share/hadoop/mapreduce/*:/opt/hadoop/share/hadoop/mapreduce/lib/*
+mapreduce.jobhistory.done-dir: /mr-history/done
+mapreduce.reduce.java.opts: -Xmx576m
+mapreduce.jobhistory.address: historyserver:10020
+yarn.app.mapreduce.am.resource.mb: 512
+mapreduce.reduce.memory.mb: 768
+mapreduce.map.env: HADOOP_MAPRED_HOME=/opt/hadoop
+mapreduce.map.java.opts: -Xmx384m
+mapreduce.jobhistory.webapp.address: historyserver:19888
+mapreduce.reduce.env: HADOOP_MAPRED_HOME=/opt/hadoop
+mapreduce.framework.name: yarn

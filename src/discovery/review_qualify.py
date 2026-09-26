@@ -5,15 +5,15 @@ from pathlib import Path
 
 import requests
 
-from steam.common.config import (
+from common.config import (
     ELIGIBLE_GAMES_PATH,
     REVIEW_PROBE_PATH,
 )
-from steam.common.jsonl import (
+from common.jsonl import (
     read_jsonl,
     write_jsonl,
 )
-from steam.discovery.policy import (
+from discovery.policy import (
     DEFAULT_POLICY_PATH,
     GameQualificationInput,
     evaluate_qualification,

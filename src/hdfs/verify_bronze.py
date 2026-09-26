@@ -1,6 +1,6 @@
 import subprocess
 
-from steam.common.config import (
+from common.config import (
     HADOOP_NAMENODE_CONTAINER,
     HDFS_BRONZE_GAMES,
     HDFS_BRONZE_GAMES_RAW,
