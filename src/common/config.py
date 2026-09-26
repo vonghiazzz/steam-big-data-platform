@@ -127,7 +127,7 @@ TARGET_REVIEWS_PER_GAME = 500
 
 
 HDFS_STEAM_ROOT = (
-    "/user/hadoop/steam"
+    "/steam"
 )
 
 HDFS_BRONZE_ROOT = (

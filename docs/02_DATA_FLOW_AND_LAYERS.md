@@ -26,9 +26,9 @@ local bronze_ready
 
 The configured lake roots are:
 
-- Bronze: `/user/hadoop/steam/bronze`
-- Silver: `/user/hadoop/steam/silver`
-- Gold: `/user/hadoop/steam/gold`
+- Bronze: `/steam/bronze`
+- Silver: `/steam/silver`
+- Gold: `/steam/gold`
 
 Only Bronze upload/verification is currently **Implemented**. Bronze-to-Silver is the immediate **In Progress** checkpoint; later transformations are **Planned**.
 
