@@ -6,10 +6,10 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-from steam.common.config import (
+from common.config import (
     CATALOG_PROBE_ROOT,
 )
-from steam.common.jsonl import (
+from common.jsonl import (
     write_jsonl,
 )
 

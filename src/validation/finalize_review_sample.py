@@ -1,6 +1,6 @@
 import json
 
-from steam.common.config import (
+from common.config import (
     BRONZE_READY_FINALIZATION_REPORT_PATH,
     BRONZE_READY_REVIEWS_ROOT,
     LANDING_REVIEWS_ROOT,
@@ -8,7 +8,7 @@ from steam.common.config import (
     TARGET_GAME_COUNT,
     TARGET_REVIEWS_PER_GAME,
 )
-from steam.common.jsonl import iter_jsonl
+from common.jsonl import iter_jsonl
 
 
 def main():

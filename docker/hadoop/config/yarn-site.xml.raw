@@ -1,0 +1,13 @@
+yarn.resourcemanager.hostname: resourcemanager
+yarn.nodemanager.pmem-check-enabled: false
+yarn.nodemanager.resource.cpu-vcores: 2
+yarn.nodemanager.remote-app-log-dir: /tmp/logs
+yarn.nodemanager.env-whitelist: JAVA_HOME,HADOOP_COMMON_HOME,HADOOP_HDFS_HOME,HADOOP_CONF_DIR,HADOOP_YARN_HOME,HADOOP_HOME,HADOOP_MAPRED_HOME,PATH,LANG,TZ,PYTHONIOENCODING
+yarn.log-aggregation-enable: true
+yarn.nodemanager.aux-services: mapreduce_shuffle
+yarn.nodemanager.resource.memory-mb: 3072
+yarn.scheduler.minimum-allocation-mb: 128
+yarn.scheduler.maximum-allocation-mb: 3072
+yarn.nodemanager.vmem-check-enabled: false
+yarn.nodemanager.aux-services.mapreduce_shuffle.class: org.apache.hadoop.mapred.ShuffleHandler
+yarn.nodemanager.delete.debug-delay-sec: 60

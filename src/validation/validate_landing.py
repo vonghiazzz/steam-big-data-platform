@@ -1,14 +1,14 @@
 import json
 from collections import Counter
 
-from steam.common.config import (
+from common.config import (
     LANDING_REVIEWS_ROOT,
     LANDING_STATE_PATH,
     LANDING_VALIDATION_REPORT_PATH,
     SELECTED_GAMES_PATH,
     TARGET_GAME_COUNT,
 )
-from steam.common.jsonl import iter_jsonl
+from common.jsonl import iter_jsonl
 
 
 FINAL_STATUSES = {

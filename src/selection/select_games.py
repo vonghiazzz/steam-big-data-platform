@@ -2,16 +2,16 @@ import argparse
 from collections import Counter, defaultdict
 from pathlib import Path
 
-from steam.common.config import (
+from common.config import (
     REVIEW_PROBE_PATH,
     SELECTED_GAMES_PATH,
     TARGET_GAME_COUNT,
 )
-from steam.common.jsonl import (
+from common.jsonl import (
     read_jsonl,
     write_jsonl,
 )
-from steam.discovery.policy import (
+from discovery.policy import (
     DEFAULT_POLICY_PATH,
     load_discovery_policy,
 )

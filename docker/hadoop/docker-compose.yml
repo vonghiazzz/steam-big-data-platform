@@ -1,0 +1,161 @@
+name: steam-hadoop-lab
+
+x-hadoop-common: &hadoop-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: steam-hadoop-lab:3.5.0
+  env_file:
+    - ./hadoop.env
+  networks:
+    - steam
+  restart: unless-stopped
+
+services:
+  namenode:
+    <<: *hadoop-common
+    container_name: steam-namenode
+    hostname: namenode
+    command: ["hdfs", "namenode"]
+    environment:
+      ENSURE_NAMENODE_DIR: /data/name/current
+    ports:
+      - "9871:9870"
+      - "8021:8020"
+    volumes:
+      - namenode_data:/data/name
+      - ./config:/opt/hadoop/etc/hadoop
+    networks:
+      - steam
+
+  datanode:
+    <<: *hadoop-common
+    container_name: steam-datanode
+    hostname: datanode
+    command: ["hdfs", "datanode"]
+    environment:
+      WAITFOR: namenode:8020
+      WAITFOR_TIMEOUT: "180"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - namenode
+    ports:
+      - "9865:9864"
+      - "9866:9866"
+    volumes:
+      - datanode_data:/data/data
+      - ./config:/opt/hadoop/etc/hadoop
+    networks:
+      - steam
+
+  resourcemanager:
+    <<: *hadoop-common
+    container_name: steam-resourcemanager
+    hostname: resourcemanager
+    command: ["yarn", "resourcemanager"]
+    environment:
+      WAITFOR: namenode:8020
+      WAITFOR_TIMEOUT: "180"
+    depends_on:
+      - namenode
+      - datanode
+    ports:
+      - "8089:8088"
+    volumes:
+      - ./config:/opt/hadoop/etc/hadoop
+    networks:
+      - steam  
+
+  nodemanager:
+    <<: *hadoop-common
+    container_name: steam-nodemanager
+    hostname: nodemanager
+    command: ["yarn", "nodemanager"]
+    environment:
+      WAITFOR: resourcemanager:8088
+      WAITFOR_TIMEOUT: "180"
+    depends_on:
+      - resourcemanager
+    ports:
+      - "8043:8042"
+    volumes:
+      - ./config:/opt/hadoop/etc/hadoop  
+    networks:
+      - steam
+
+  historyserver:
+    <<: *hadoop-common
+    container_name: steam-historyserver
+    hostname: historyserver
+    command: ["mapred", "historyserver"]
+    environment:
+      WAITFOR: namenode:8020
+      WAITFOR_TIMEOUT: "180"
+    depends_on:
+      - namenode
+      - resourcemanager
+    ports:
+      - "19889:19888"
+    volumes:
+      - ./config:/opt/hadoop/etc/hadoop 
+    networks:
+      - steam 
+
+  client:
+    <<: *hadoop-common
+    container_name: steam-client
+    hostname: client
+    command: ["bash", "/workspace/scripts/client-start.sh"]
+    environment:
+      WAITFOR: namenode:8020
+      WAITFOR_TIMEOUT: "180"
+    depends_on:
+      - namenode
+      - datanode
+      - resourcemanager
+      - nodemanager
+      - historyserver
+    volumes:
+      - ./workspace:/workspace
+      - ./config:/opt/hadoop/etc/hadoop
+      - ../../data:/workspace/data
+    networks:
+      - steam
+
+  spark:
+    image: apache/spark:3.5.0
+    container_name: steam-spark
+    hostname: spark
+  
+    entrypoint: ["/bin/sh"]
+
+    command:
+      - -c
+      - |
+        while true; do sleep 3600; done
+
+    environment:
+      SPARK_HOME: /opt/spark
+      PATH: /opt/spark/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+      HADOOP_CONF_DIR: /opt/hadoop/etc/hadoop
+
+    volumes:
+      - ../../src:/workspace/src
+      - ../../data:/workspace/data
+      - ./config:/opt/hadoop/etc/hadoop
+
+    depends_on:
+      - namenode
+      - datanode
+
+    networks:
+      - steam
+
+networks:
+  steam:
+    driver: bridge
+
+volumes:
+  namenode_data:
+  datanode_data:
