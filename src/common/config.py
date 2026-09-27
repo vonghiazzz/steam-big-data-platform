@@ -7,6 +7,36 @@ PROJECT_ROOT = (
     .parents[2]
 )
 
+# HDFS root
+
+HDFS_ROOT = "/steam"
+
+
+# Bronze layer
+
+BRONZE_PATH = f"{HDFS_ROOT}/bronze"
+
+BRONZE_GAMES_PATH = (
+    f"{BRONZE_PATH}/games"
+)
+
+BRONZE_REVIEWS_PATH = (
+    f"{BRONZE_PATH}/reviews"
+)
+
+
+# Silver layer sau này
+
+SILVER_PATH = f"{HDFS_ROOT}/silver"
+
+SILVER_GAMES_PATH = (
+    f"{SILVER_PATH}/games"
+)
+
+SILVER_REVIEWS_PATH = (
+    f"{SILVER_PATH}/reviews"
+)
+
 
 DATA_ROOT = (
     PROJECT_ROOT

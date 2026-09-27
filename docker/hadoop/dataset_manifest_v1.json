@@ -1,0 +1,16 @@
+{
+    "dataset_name": "Steam Game Analytics Dataset",
+    "version": "v1.0",
+    "created_at": "2026-09-27T03:50:00.773277",
+    "layers": {
+        "gold": {
+            "base": "hdfs://namenode:8020/steam/gold/base",
+            "game_aggregation": "hdfs://namenode:8020/steam/gold/game_aggregation"
+        }
+    },
+    "purpose": [
+        "analytics",
+        "machine_learning"
+    ],
+    "format": "parquet"
+}

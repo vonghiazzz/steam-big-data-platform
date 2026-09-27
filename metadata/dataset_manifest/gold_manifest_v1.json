@@ -1,0 +1,75 @@
+{
+  "dataset_name": "steam_review_gold",
+
+  "version": "v1.0",
+
+  "created_at": "2026-09-27",
+
+  "layer": "gold",
+
+  "description": "Gold dataset combining Steam reviews and game metadata for analytics and ML",
+
+  "storage": {
+    "format": "parquet",
+    "path": "hdfs://namenode:8020/steam/gold/base"
+  },
+
+
+  "source": {
+    "reviews": {
+      "layer": "silver",
+      "path": "hdfs://namenode:8020/steam/silver/reviews"
+    },
+
+    "games": {
+      "layer": "silver",
+      "path": "hdfs://namenode:8020/steam/silver/games"
+    }
+  },
+
+
+  "statistics": {
+    "records": 20400,
+    "games": 50,
+    "join_coverage": "100%"
+  },
+
+
+  "schema": [
+    "appid",
+    "game_name",
+    "recommendationid",
+    "voted_up",
+    "recommendation_label",
+    "steam_purchase",
+    "received_for_free",
+    "playtime_hours",
+    "language_clean",
+    "review_year",
+    "genres",
+    "primary_genre",
+    "is_free",
+    "price",
+    "release_year",
+    "overall_positive_rate"
+  ],
+
+
+  "ml_usage": {
+    "target_column": "recommendation_label",
+
+    "features": [
+      "playtime_hours",
+      "steam_purchase",
+      "received_for_free",
+      "price",
+      "is_free",
+      "primary_genre"
+    ],
+
+    "excluded_columns": [
+      "recommendationid",
+      "ingested_at"
+    ]
+  }
+}

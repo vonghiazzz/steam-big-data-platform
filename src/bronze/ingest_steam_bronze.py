@@ -6,6 +6,12 @@ from schemas.steam_bronze_schema import (
 )
 
 
+from common.config import (
+    BRONZE_GAMES_PATH,
+    BRONZE_REVIEWS_PATH
+)
+
+
 spark = (
     SparkSession.builder
     .appName(
@@ -21,7 +27,7 @@ games_df = (
         STEAM_GAMES_BRONZE_SCHEMA
     )
     .json(
-        "/user/bda501/steam/bronze/games"
+        BRONZE_GAMES_PATH
     )
 )
 
@@ -32,7 +38,7 @@ reviews_df = (
         STEAM_REVIEWS_BRONZE_SCHEMA
     )
     .json(
-        "/user/bda501/steam/bronze/reviews"
+        BRONZE_REVIEWS_PATH
     )
 )
 
@@ -60,14 +66,14 @@ print(
 games_df.write.mode(
     "overwrite"
 ).parquet(
-    "/user/bda501/steam/bronze/parquet/games"
+    "/steam/bronze/parquet/games"
 )
 
 
 reviews_df.write.mode(
     "overwrite"
 ).parquet(
-    "/user/bda501/steam/bronze/parquet/reviews"
+    "/steam/bronze/parquet/reviews"
 )
 
 
