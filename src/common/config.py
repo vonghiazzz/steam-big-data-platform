@@ -150,8 +150,20 @@ HDFS_SILVER_ROOT = (
     f"{HDFS_STEAM_ROOT}/silver"
 )
 
+HDFS_SILVER_GAMES = (
+    f"{HDFS_SILVER_ROOT}/games"
+)
+
+HDFS_SILVER_REVIEWS = (
+    f"{HDFS_SILVER_ROOT}/reviews"
+)
+
 HDFS_GOLD_ROOT = (
     f"{HDFS_STEAM_ROOT}/gold"
+)
+
+HDFS_GOLD_BASE = (
+    f"{HDFS_GOLD_ROOT}/base"
 )
 
 HADOOP_NAMENODE_CONTAINER = (

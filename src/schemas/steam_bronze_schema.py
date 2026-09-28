@@ -44,6 +44,28 @@ PRICE_OVERVIEW_SCHEMA = StructType(
     ]
 )
 
+PACKAGE_SUB_SCHEMA = StructType(
+    [
+        StructField("packageid", IntegerType(), True),
+        StructField("option_text", StringType(), True),
+        StructField("option_description", StringType(), True),
+        # Steam returns this field as a JSON string in the canonical records.
+        StructField("can_get_free_license", StringType(), True),
+        StructField("is_free_license", BooleanType(), True),
+        StructField("price_in_cents_with_discount", LongType(), True),
+    ]
+)
+
+PACKAGE_GROUP_SCHEMA = StructType(
+    [
+        StructField("name", StringType(), True),
+        StructField("title", StringType(), True),
+        # Steam returns this field as "true"/"false" strings.
+        StructField("is_recurring_subscription", StringType(), True),
+        StructField("subs", ArrayType(PACKAGE_SUB_SCHEMA), True),
+    ]
+)
+
 RELEASE_DATE_SCHEMA = StructType(
     [
         StructField("coming_soon", BooleanType(), True),
@@ -65,6 +87,7 @@ GAME_DATA_SCHEMA = StructType(
         StructField("categories", ArrayType(CATEGORY_SCHEMA), True),
         StructField("genres", ArrayType(GENRE_SCHEMA), True),
         StructField("price_overview", PRICE_OVERVIEW_SCHEMA, True),
+        StructField("package_groups", ArrayType(PACKAGE_GROUP_SCHEMA), True),
         StructField("release_date", RELEASE_DATE_SCHEMA, True),
     ]
 )
