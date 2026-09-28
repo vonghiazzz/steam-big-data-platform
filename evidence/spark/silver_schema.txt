@@ -1,0 +1,37 @@
+SILVER GAMES
+root
+ |-- appid: integer (nullable = true)
+ |-- game_name: string (nullable = true)
+ |-- is_free: boolean (nullable = true)
+ |-- price: double (nullable = true)
+ |-- currency: string (nullable = true)
+ |-- genres: array (nullable = true)
+ |    |-- element: string (containsNull = true)
+ |-- categories: array (nullable = true)
+ |    |-- element: string (containsNull = true)
+ |-- platforms: struct (nullable = true)
+ |    |-- windows: boolean (nullable = true)
+ |    |-- mac: boolean (nullable = true)
+ |    |-- linux: boolean (nullable = true)
+ |-- release_date: string (nullable = true)
+
+SILVER REVIEWS
+root
+ |-- recommendationid: string (nullable = true)
+ |-- appid: integer (nullable = true)
+ |-- game_name: string (nullable = true)
+ |-- language: string (nullable = true)
+ |-- voted_up: boolean (nullable = true)
+ |-- playtime_at_review: integer (nullable = true)
+ |-- playtime_forever: integer (nullable = true)
+ |-- steam_purchase: boolean (nullable = true)
+ |-- received_for_free: boolean (nullable = true)
+ |-- timestamp_created: long (nullable = true)
+ |-- votes_up: integer (nullable = true)
+ |-- votes_funny: integer (nullable = true)
+ |-- weighted_vote_score: string (nullable = true)
+ |-- recommendation_label: integer (nullable = true)
+ |-- playtime_hours: double (nullable = true)
+ |-- language_clean: string (nullable = true)
+ |-- review_year: integer (nullable = true)
+

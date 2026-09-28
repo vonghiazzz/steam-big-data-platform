@@ -3,8 +3,8 @@
 # Run from the repository ROOT:   bash src/hdfs/upload_bronze.sh
 #
 # Local input  (after unzip + move, see guide):
-#   data/raw/steam/landing/games/games_raw.jsonl
-#   data/raw/steam/bronze_ready/reviews_by_game/<appid>.jsonl   (50 files)
+#   data/raw/landing/games/games_raw.jsonl
+#   data/raw/bronze_ready/reviews_by_game/<appid>.jsonl   (50 files)
 # HDFS target:
 #   /steam/bronze/games/games_raw.jsonl
 #   /steam/bronze/reviews/<appid>.jsonl
@@ -15,7 +15,7 @@ set -euo pipefail
 export MSYS_NO_PATHCONV=1   # Git Bash on Windows: stop it rewriting /tmp, /steam paths
 
 CONTAINER="${CONTAINER:-bda501-namenode}"
-LOCAL_ROOT="${LOCAL_ROOT:-data/raw/steam}"
+LOCAL_ROOT="${LOCAL_ROOT:-data/raw}"
 GAMES_SRC="$LOCAL_ROOT/landing/games/games_raw.jsonl"
 REVIEWS_SRC="$LOCAL_ROOT/bronze_ready/reviews_by_game"
 HDFS_GAMES="/steam/bronze/games"

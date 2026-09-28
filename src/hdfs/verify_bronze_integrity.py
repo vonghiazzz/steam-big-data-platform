@@ -81,7 +81,7 @@ def md5_of_local(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", choices=["local", "hdfs"], required=True)
-    ap.add_argument("--local-root", default="data/raw/steam")
+    ap.add_argument("--local-root", default="data/raw")
     ap.add_argument("--container", default="bda501-namenode")
     ap.add_argument("--hdfs-games", default="/steam/bronze/games")
     ap.add_argument("--hdfs-reviews", default="/steam/bronze/reviews")
