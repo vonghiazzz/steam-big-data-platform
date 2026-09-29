@@ -2,7 +2,7 @@
 
 ## Scope and status
 
-The historical batch path is implemented through verified HDFS Bronze. PySpark Bronze-to-Silver is the immediate **In Progress** checkpoint. Silver-to-Gold is **Planned**.
+The canonical historical batch path is implemented and validated through HDFS Bronze, Silver, and Gold for 50 games and 25,000 reviews.
 
 ## Historical backfill
 

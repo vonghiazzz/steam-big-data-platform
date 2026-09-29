@@ -2,7 +2,7 @@
 
 ## Current and planned platform
 
-HDFS Bronze storage/verification is **Implemented**. Spark batch processing is the next checkpoint. Kafka, Structured Streaming, MongoDB serving, and broader cluster deployment remain **Planned / Design-only** unless later evidence proves otherwise.
+Canonical HDFS Bronze/Silver/Gold batch storage is implemented. Kafka and Structured Streaming V1 code now supports `REVIEW_CREATED` with bounded local defaults and fixture validation; live end-to-end smoke evidence remains pending. MongoDB serving and broader cluster deployment remain planned.
 
 ## Core services
 

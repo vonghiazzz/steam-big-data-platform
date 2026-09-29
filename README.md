@@ -18,7 +18,7 @@ Hệ thống kết hợp:
 - MongoDB cho serving layer
 - Cluster / Cloud architecture cho khả năng scale
 
-> **Implementation status:** catalog discovery, configurable qualification, local JSONL registry reconciliation/onboarding planning, initial 50-game selection, historical ingestion, validation, bronze-ready finalization, and HDFS Bronze verification are implemented. PySpark Bronze-to-Silver is the immediate next checkpoint. Production registry automation, Kafka, Structured Streaming, MapReduce, Spark SQL/EDA, MLlib, and MongoDB serving remain planned or design-only unless later evidence states otherwise.
+> **Implementation status:** catalog discovery/onboarding planning, canonical historical ingestion, and the validated HDFS Bronze → Silver → Gold batch path are implemented. Streaming V1 code supports `REVIEW_CREATED` only with bounded producer/Spark fixture tests; a live Kafka-to-HDFS smoke run remains pending. Review updates, price/metadata changes, MapReduce, MLlib, and MongoDB serving remain later work unless evidence states otherwise.
 
 Tài liệu kiến trúc chi tiết bắt đầu tại [Project Overview](docs/00_PROJECT_OVERVIEW.md) và [Architecture](docs/01_ARCHITECTURE.md).
 
@@ -285,11 +285,11 @@ Batch vẫn cần thiết ngay cả khi có Streaming.
 
 Nếu business rule hoặc schema thay đổi, toàn bộ dataset có thể được rebuild lại từ Bronze.
 
-Current 50-game historical backfill và HDFS Bronze đã hoàn thành. PySpark Bronze-to-Silver chưa hoàn thành và là checkpoint tiếp theo.
+Canonical batch 50 game / 25.000 review đã hoàn thành và được xác minh qua HDFS Bronze → Silver → Gold.
 
 ---
 
-# 5. Streaming Processing Path (Planned / Design-only)
+# 5. Streaming Processing Path (V1 Implemented / Live Smoke Pending)
 
 Streaming dự kiến xử lý dữ liệu mới hoặc thay đổi gần real-time. Steam API được polling cho các game `ACTIVE`; producer so sánh state và chỉ tạo event khi phát hiện thay đổi.
 
@@ -344,11 +344,11 @@ appid
 
 khi cần group các update của cùng game.
 
-Kafka, event producer và Structured Streaming chưa được triển khai trong current repository.
+Streaming V1 hiện đã có event producer và Structured Streaming cho `REVIEW_CREATED`; live Kafka-to-HDFS smoke evidence vẫn chưa được thiết lập. Các loại update khác thuộc V2.
 
 ---
 
-# 6. Streaming Reliability (Design-only)
+# 6. Streaming Reliability (V1)
 
 Đây là reliability design cho planned streaming component, không phải implemented evidence.
 
@@ -614,7 +614,7 @@ games.appid = reviews.appid
 
 # 11. ETL with PySpark (Next — Not Yet Implemented)
 
-Bronze-to-Silver PySpark chưa được triển khai trong repository. Đây là exact next engineering checkpoint.
+Canonical Bronze-to-Silver và Silver-to-Gold PySpark đã được triển khai; streaming ghi vào các incremental path riêng và không overwrite batch baseline.
 
 ETL:
 
@@ -1258,7 +1258,7 @@ Chỉ measured experiment mới được ghi là implemented evidence.
 | Silver -> Gold | Planned |
 | MapReduce aggregation | Planned |
 | Spark SQL / EDA | Planned |
-| Kafka / Structured Streaming | Planned |
+| Kafka / Structured Streaming | V1 implemented; live smoke pending |
 | Spark MLlib | Planned |
 | MongoDB Serving | Planned |
 | Performance experiment | Planned |
