@@ -166,6 +166,38 @@ HDFS_GOLD_BASE = (
     f"{HDFS_GOLD_ROOT}/base"
 )
 
+HDFS_BRONZE_STREAM_EVENTS = (
+    f"{HDFS_BRONZE_ROOT}/stream_events"
+)
+
+HDFS_SILVER_REVIEWS_INCREMENTAL_V1 = (
+    f"{HDFS_SILVER_ROOT}/reviews_incremental_v1"
+)
+
+HDFS_GOLD_BASE_INCREMENTAL_V1 = (
+    f"{HDFS_GOLD_ROOT}/base_incremental_v1"
+)
+
+HDFS_REVIEW_EVENTS_QUARANTINE = (
+    f"{HDFS_STEAM_ROOT}/quarantine/review_events"
+)
+
+HDFS_REVIEW_BRONZE_CHECKPOINT_V1 = (
+    f"{HDFS_STEAM_ROOT}/checkpoints/review_bronze_archive_v1"
+)
+
+HDFS_REVIEW_SILVER_CHECKPOINT_V1 = (
+    f"{HDFS_STEAM_ROOT}/checkpoints/review_silver_v1"
+)
+
+HDFS_REVIEW_QUARANTINE_CHECKPOINT_V1 = (
+    f"{HDFS_STEAM_ROOT}/checkpoints/review_quarantine_v1"
+)
+
+HDFS_REVIEW_GOLD_CHECKPOINT_V1 = (
+    f"{HDFS_STEAM_ROOT}/checkpoints/review_gold_v1"
+)
+
 HADOOP_NAMENODE_CONTAINER = (
     "bda501-namenode"
 )

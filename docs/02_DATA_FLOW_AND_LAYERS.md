@@ -30,7 +30,7 @@ The configured lake roots are:
 - Silver: `/steam/silver`
 - Gold: `/steam/gold`
 
-Only Bronze upload/verification is currently **Implemented**. Bronze-to-Silver is the immediate **In Progress** checkpoint; later transformations are **Planned**.
+Canonical Bronze upload/verification, Bronze-to-Silver, and Silver-to-Gold are implemented and validated. Streaming V1 writes new reviews to separate incremental Silver/Gold paths.
 
 ## Data contracts
 

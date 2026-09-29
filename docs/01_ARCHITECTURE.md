@@ -68,9 +68,9 @@ Local Discovery Control Plane V1 is **Implemented**. A production registry datab
 
 ## Processing paths
 
-The historical batch path is implemented through HDFS Bronze. PySpark Bronze-to-Silver is **In Progress**. Silver-to-Gold and MapReduce aggregation are **Planned**.
+The canonical historical batch path is implemented and validated through HDFS Bronze, Silver, and Gold. MapReduce aggregation remains planned.
 
-The incremental path is **Design-only**: polling creates events such as `new_review`, `vote_update`, `price_update`, and `game_metadata_update`; Kafka then feeds both an immutable Bronze archive and Structured Streaming. Batch and streaming converge on shared Silver/Gold contracts rather than creating separate analytics platforms.
+Streaming V1 implements `REVIEW_CREATED`: bounded ACTIVE-game polling creates internal events, and Kafka feeds both an immutable Bronze archive and Structured Streaming incremental Silver/Gold outputs. Review updates, price changes, and game metadata changes remain planned. Batch and streaming converge on shared contracts rather than creating separate analytics platforms.
 
 ## Infrastructure and operations
 

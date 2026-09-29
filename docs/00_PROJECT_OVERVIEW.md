@@ -29,10 +29,11 @@ This snapshot supports reproducible EDA, ML, and MapReduce-versus-Spark validati
 | Historical ingestion | **Implemented** | Review crawler and game-metadata preparation |
 | Landing and bronze-ready validation | **Implemented** | Validation and finalization scripts with reconciliation |
 | HDFS Bronze upload and verification | **Implemented** | Raw selected-scope data verified under HDFS Bronze |
-| PySpark Bronze-to-Silver | **In Progress / next checkpoint** | Implementation file does not yet exist |
-| Silver-to-Gold, MapReduce, Spark SQL / EDA | **Planned** | Designs documented in this folder |
+| PySpark Bronze-to-Silver | **Implemented and validated** | Canonical 50-game / 25,000-review batch baseline |
+| Silver-to-Gold | **Implemented and validated** | Canonical Gold Base contains 25,000 rows |
+| MapReduce, Spark SQL / EDA | **Planned** | Designs documented in this folder |
 | Production registry automation | **Design-only** | Local V1 exists; database service and scheduler are not implemented |
-| Kafka and Structured Streaming | **Design-only** | Incremental polling/event path is not implemented |
+| Kafka and Structured Streaming | **V1 implemented / runtime smoke pending** | `REVIEW_CREATED` only; bounded producer/Spark fixture tests pass |
 | Spark MLlib and MongoDB serving | **Planned** | Depend on validated Silver/Gold datasets |
 
 ## Big Data platform
