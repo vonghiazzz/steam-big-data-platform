@@ -1,0 +1,10 @@
+Found 9 items
+drwxr-xr-x   - spark supergroup          0 2026-09-29 09:18 /steam/gold/analytics/category_metrics
+drwxr-xr-x   - spark supergroup          0 2026-09-29 09:18 /steam/gold/analytics/engagement_metrics
+drwxr-xr-x   - spark supergroup          0 2026-09-29 09:18 /steam/gold/analytics/free_paid_metrics
+drwxr-xr-x   - spark supergroup          0 2026-09-29 09:18 /steam/gold/analytics/game_metrics
+drwxr-xr-x   - spark supergroup          0 2026-09-29 09:18 /steam/gold/analytics/genre_metrics
+drwxr-xr-x   - spark supergroup          0 2026-09-29 09:18 /steam/gold/analytics/label_profile
+drwxr-xr-x   - spark supergroup          0 2026-09-29 09:18 /steam/gold/analytics/platform_metrics
+drwxr-xr-x   - spark supergroup          0 2026-09-29 09:18 /steam/gold/analytics/playtime_metrics
+drwxr-xr-x   - spark supergroup          0 2026-09-29 09:18 /steam/gold/analytics/purchase_metrics

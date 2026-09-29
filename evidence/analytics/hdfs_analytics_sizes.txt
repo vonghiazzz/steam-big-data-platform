@@ -1,0 +1,9 @@
+3.8 K  11.3 K  /steam/gold/analytics/category_metrics
+7.3 K  22.0 K  /steam/gold/analytics/engagement_metrics
+3.3 K  9.8 K   /steam/gold/analytics/free_paid_metrics
+3.8 K  11.4 K  /steam/gold/analytics/game_metrics
+2.3 K  6.8 K   /steam/gold/analytics/genre_metrics
+4.5 K  13.4 K  /steam/gold/analytics/label_profile
+1.7 K  5.0 K   /steam/gold/analytics/platform_metrics
+2.1 K  6.2 K   /steam/gold/analytics/playtime_metrics
+2.0 K  5.9 K   /steam/gold/analytics/purchase_metrics
