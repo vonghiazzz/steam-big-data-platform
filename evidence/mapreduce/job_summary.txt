@@ -49,7 +49,7 @@ packageJobJar: [/tmp/hadoop-unjar13696203693878877586/] [] /tmp/streamjob7492353
 		HDFS: Number of large read operations=0
 		HDFS: Number of write operations=2
 		HDFS: Number of bytes read erasure-coded=0
-	Job Counters 
+	Job Counters
 		Killed map tasks=1
 		Launched map tasks=50
 		Launched reduce tasks=1
@@ -94,8 +94,8 @@ packageJobJar: [/tmp/hadoop-unjar13696203693878877586/] [] /tmp/streamjob7492353
 		WRONG_LENGTH=0
 		WRONG_MAP=0
 		WRONG_REDUCE=0
-	File Input Format Counters 
+	File Input Format Counters
 		Bytes Read=30854764
-	File Output Format Counters 
+	File Output Format Counters
 		Bytes Written=1700
 2026-09-30 03:33:48 INFO  StreamJob:1029 - Output directory: /steam/mapreduce/game_recommendation_metrics
