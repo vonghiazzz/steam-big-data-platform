@@ -2,6 +2,7 @@
 set -euo pipefail
 
 PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+source "$PROJECT_ROOT/scripts/load_project_env.sh" "$PROJECT_ROOT/.env"
 SPARK_KAFKA_PACKAGE="${SPARK_KAFKA_PACKAGE:-org.apache.spark:spark-sql-kafka-0-10_2.13:4.2.0}"
 
 cd "$PROJECT_ROOT"

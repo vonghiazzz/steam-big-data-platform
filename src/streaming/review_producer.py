@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Protocol
 
 import requests
+from dotenv import load_dotenv
 
 from src.discovery.registry import (
     STATUS_ACTIVE,
@@ -26,6 +27,7 @@ from src.streaming.producer_state import ProducerState
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env", override=False)
 DEFAULT_REGISTRY_PATH = PROJECT_ROOT / "data/raw/registry/game_registry.jsonl"
 DEFAULT_STATE_PATH = (
     PROJECT_ROOT / "data/state/streaming/review_producer_v1.sqlite3"

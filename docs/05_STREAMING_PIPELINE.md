@@ -95,6 +95,16 @@ raw event archive. Broker logs are explicitly placed in the Compose-managed
 `kafka-data` volume at `/var/lib/kafka/data`; retention still applies and the
 volume is not a replacement for Bronze.
 
+Runtime configuration comes from the project-local `.env`. The committed
+`.env.example` is only a template for new machines. Compose reads `.env`
+directly, while the topic, producer, streaming, and storage scripts load it
+through `scripts/load_project_env.sh`. Variables explicitly supplied on the
+command line take precedence, which keeps isolated test overrides safe.
+
+```bash
+cp .env.example .env  # first-time setup only; replace every CHANGE_ME value
+```
+
 ```bash
 docker compose -f compose.streaming.yaml up -d
 bash scripts/create_streaming_topic.sh

@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+source "$PROJECT_ROOT/scripts/load_project_env.sh" "$PROJECT_ROOT/.env"
+
 MIN_FREE_GB="${STREAM_MIN_FREE_GB:-5}"
-PROJECT_PATH="${PROJECT_PATH:-$(pwd)}"
+PROJECT_PATH="${PROJECT_PATH:-$PROJECT_ROOT}"
 NAMENODE_CONTAINER="${HADOOP_NAMENODE_CONTAINER:-bda501-namenode}"
 KAFKA_CONTAINER="${KAFKA_CONTAINER:-steam-kafka}"
 

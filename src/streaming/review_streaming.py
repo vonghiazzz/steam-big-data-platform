@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from dotenv import load_dotenv
 from pyspark.sql import functions as F
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql.utils import AnalysisException
@@ -26,6 +27,7 @@ from src.common.config import (
     HDFS_SILVER_GAMES,
     HDFS_SILVER_REVIEWS,
     HDFS_SILVER_REVIEWS_INCREMENTAL_V1,
+    PROJECT_ROOT,
 )
 from src.gold.gold_join import create_gold_dataset
 from src.schemas.steam_bronze_schema import REVIEW_DATA_SCHEMA
@@ -371,6 +373,7 @@ def _gold_sink(
 
 
 def main() -> None:
+    load_dotenv(PROJECT_ROOT / ".env", override=False)
     paths = resolve_stream_paths()
     hdfs_default_fs = os.getenv(
         "HDFS_DEFAULT_FS",
