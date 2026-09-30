@@ -1,0 +1,17 @@
+SAMPLE QUERIES
+
+Latest 20 recent reviews:
+db.recent_reviews.find({}).sort({timestamp_created:-1}).limit(20)
+
+Latest reviews for appid 570:
+db.recent_reviews.find({appid:570}).sort({timestamp_created:-1}).limit(20)
+
+REPRESENTATIVE RESULTS
+
+{"_id":"236525130","recommendationid":"236525130","appid":570,"voted_up":true,"playtime_at_review":140769,"playtime_forever":140799,"steam_purchase":true,"received_for_free":false,"timestamp_created":"2026-09-30T12:49:46Z"}
+{"_id":"236523654","recommendationid":"236523654","appid":570,"voted_up":true,"playtime_at_review":1145,"playtime_forever":1205,"steam_purchase":true,"received_for_free":false,"timestamp_created":"2026-09-30T12:08:59Z"}
+{"_id":"236522748","recommendationid":"236522748","appid":570,"voted_up":false,"playtime_at_review":61193,"playtime_forever":61253,"steam_purchase":true,"received_for_free":false,"timestamp_created":"2026-09-30T11:43:32Z"}
+
+result_count=134
+unique_recommendationid=134
+_id_equals_recommendationid=true

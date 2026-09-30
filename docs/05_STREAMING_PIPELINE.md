@@ -1,11 +1,12 @@
-# Streaming Pipeline V1 — New Reviews
+# Streaming Pipeline — New Reviews and MongoDB Realtime Serving
 
 ## Status and scope
 
 Streaming V1 is implemented for `REVIEW_CREATED` only. The implementation
 has bounded unit/Spark fixture coverage and a bounded live Kafka-to-HDFS smoke
 run. Price changes, game metadata changes, and review updates are deliberately
-out of scope.
+out of scope. MongoDB Serving V2 adds optional materialized views for validated
+new reviews; it does not replace Kafka or HDFS.
 
 Steam does not provide this project with a native push stream. Near-real-time
 events are created by polling only registry entries whose status is `ACTIVE`:
@@ -20,6 +21,8 @@ Game Registry (ACTIVE only)
              -> /steam/silver/reviews_incremental_v1
              -> stream-static join with /steam/silver/games
              -> /steam/gold/base_incremental_v1
+             +-> MongoDB recent_reviews
+             +-> 1-hour stateful windows -> MongoDB realtime_game_metrics
 ```
 
 The producer never scans the Steam catalog and never falls back to every known
@@ -178,6 +181,55 @@ not introduce review text, `overall_positive_rate`, `primary_genre`, or
 IDs before append, so a deliberately reset Gold checkpoint cannot duplicate
 rows already present in the output path.
 
+## MongoDB realtime serving
+
+MongoDB realtime serving is disabled by default. Enable it with
+`MONGO_REALTIME_ENABLED=true`; the existing Streaming V1 HDFS behavior remains
+unchanged when it is false. The sink reuses `MONGO_URI` (default
+`mongodb://localhost:27017`) and `MONGO_DATABASE` (default `steam_analytics`).
+Collection names default to `recent_reviews` and `realtime_game_metrics` and can
+be overridden with `MONGO_RECENT_REVIEWS_COLLECTION` and
+`MONGO_REALTIME_METRICS_COLLECTION`.
+
+Both Mongo queries read the validated incremental Silver file stream. This is a
+deliberate stage boundary: malformed events have already gone to quarantine,
+`recommendationid` duplicates have been removed with the watermark, and the
+canonical historical IDs have already been rejected by the static anti-join.
+It also avoids a second Kafka pipeline and avoids chaining deduplication and
+window aggregation as two stateful operators in one `update` query. The
+`event_time_ts` used for the one-hour window is reconstructed exactly from the
+same Steam `timestamp_created` epoch used by the producer's envelope
+`event_time`.
+
+`recent_reviews` stores one document per review with `_id = recommendationid`.
+`realtime_game_metrics` uses one-hour tumbling event-time windows grouped by
+`appid`; each document key is
+`appid:window_start_utc:window_end_utc`. Its metrics are `review_count`,
+`positive_reviews`, `negative_reviews`, and `recommendation_rate`. The metric
+query uses `outputMode("update")`, so MongoDB receives evolving materialized
+state before the watermark closes the window.
+
+Structured Streaming may retry a `foreachBatch`. Both collections therefore
+use deterministic keys with PyMongo replacement upserts. This is retry-safe and
+idempotent for serving state; it is not a claim of exactly-once MongoDB delivery.
+MongoDB is only the serving/materialized-view layer. Kafka plus HDFS remain the
+transport, source, history, and replay layers.
+
+Each Mongo query owns a separate checkpoint:
+
+```text
+/steam/checkpoints/mongodb/recent_reviews
+/steam/checkpoints/mongodb/realtime_game_metrics
+```
+
+Do not share or delete these checkpoints during normal operation. If realtime
+serving is enabled and MongoDB is unavailable, startup fails visibly instead of
+silently skipping Mongo writes.
+
+Serving V2 does not include price updates, player-count updates, metadata
+updates, `game_current_state`, API/frontend/WebSocket work, or model
+predictions.
+
 ## Isolated fixture/E2E resources
 
 Fixture runs must never use the production topic, output paths, or checkpoints.
@@ -278,7 +330,7 @@ NEW
 
 A `NEW` game must never become a source of historical `REVIEW_CREATED` events.
 
-## Streaming V2 backlog
+## Future streaming backlog
 
 - `REVIEW_UPDATED`
 - `PRICE_CHANGED`

@@ -1,0 +1,21 @@
+collection	before	after
+game_metrics	50	50
+genre_metrics	17	17
+playtime_metrics	5	5
+free_paid_metrics	2	2
+engagement_metrics	50	50
+label_profile	1	1
+platform_metrics	3	3
+category_metrics	59	59
+purchase_metrics	2	2
+
+HISTORICAL MONGODB COLLECTIONS UNCHANGED: PASS
+
+Idempotency read-back:
+collection	before	after_same_document_upserted_twice
+recent_reviews	134	134
+realtime_game_metrics	30	30
+
+recent_review_id=236441533
+metric_window_id=570:2026-09-29T09:00:00Z:2026-09-29T10:00:00Z
+MONGODB REALTIME IDEMPOTENCY: PASS

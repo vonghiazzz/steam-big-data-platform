@@ -168,6 +168,14 @@ class StreamingSparkV1Test(unittest.TestCase):
             paths.silver_checkpoint,
             "/steam/test/checkpoints/review_silver_v1",
         )
+        self.assertEqual(
+            paths.mongodb_recent_checkpoint,
+            "/steam/test/checkpoints/mongodb/recent_reviews",
+        )
+        self.assertEqual(
+            paths.mongodb_metrics_checkpoint,
+            "/steam/test/checkpoints/mongodb/realtime_game_metrics",
+        )
 
     def test_file_stream_checkpoint_restart_does_not_replay(self):
         root = Path(self.temp.name) / "checkpoint-restart"

@@ -1,0 +1,20 @@
+MONGODB SERVING V2 — REALTIME REVIEW VALIDATION
+runtime_date=2026-09-30
+database=steam_analytics
+recent_reviews=134
+realtime_game_metrics=30
+
+recent_reviews.id_mismatch=0
+recent_reviews.missing_appid=0
+recent_reviews.non_boolean_voted_up=0
+recent_reviews.non_date_timestamp_created=0
+recent_reviews.duplicate_recommendationids=0
+recent_reviews.canonical_historical_overlap=0
+
+realtime_game_metrics.missing_appid=0
+realtime_game_metrics.invalid_window=0
+realtime_game_metrics.non_positive_review_count=0
+realtime_game_metrics.invalid_positive_negative_balance=0
+realtime_game_metrics.invalid_recommendation_rate=0
+
+MONGODB REALTIME VALIDATION: PASS

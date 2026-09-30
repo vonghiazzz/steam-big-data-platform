@@ -1,0 +1,46 @@
+MONGODB SERVING V2 — BOUNDED RUNTIME
+runtime_date=2026-09-30
+
+Initial Kafka offsets:
+steam_events:0:0
+steam_events:1:0
+steam_events:2:0
+
+No retained event was available initially. The existing producer was run once:
+bash scripts/run_review_producer.sh --once --max-games 2
+
+Producer result:
+registry_total=166
+active_game_count=50
+poll_scope_count=2
+appid=570 bootstrap=False observed=129 emitted=129
+appid=730 bootstrap=True observed=300 emitted=0
+cycle_emitted=129
+
+The 129 emitted records were genuine Steam REVIEW_CREATED events. No fixture,
+canonical-history replay, or artificial duplicate Kafka traffic was used.
+
+Runtime command:
+MONGO_REALTIME_ENABLED=true STREAM_AVAILABLE_NOW=true SPARK_LOG_LEVEL=ERROR PYTHONPATH=/tmp/steam_v2_deps PYSPARK_PYTHON="$(pyenv which python)" PYSPARK_DRIVER_PYTHON="$(pyenv which python)" bash scripts/run_review_streaming.sh
+
+The first runtime attempt failed before a recent_reviews checkpoint commit
+because timestamp_created was missing from the serving projection. The alias
+was fixed and covered by a regression test. The retry completed with exit 0.
+Deterministic Mongo keys made any concurrent/retried metric writes safe.
+
+Final result:
+recent_reviews=134
+realtime_game_metrics=30
+
+Verified independent HDFS checkpoints:
+/steam/checkpoints/mongodb/recent_reviews
+/steam/checkpoints/mongodb/realtime_game_metrics
+The metrics checkpoint contains a state store; the recent-review checkpoint
+does not share its offsets or commits.
+
+The first V2 checkpoint also materialized five previously validated records
+already present in Streaming Silver, so recent_reviews contains 129 newly
+produced records plus five earlier incremental records. Historical overlap with
+the canonical 25,000-review baseline is zero.
+
+STREAMING MONGODB RUNTIME: PASS

@@ -9,6 +9,15 @@ cd "$PROJECT_ROOT"
 export PYTHONPATH="$PROJECT_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export HADOOP_USER_NAME="${HADOOP_USER_NAME:-hadoop}"
 
+case "${MONGO_REALTIME_ENABLED:-false}" in
+  1|true|TRUE|yes|YES)
+    echo "MongoDB realtime serving: ENABLED"
+    ;;
+  *)
+    echo "MongoDB realtime serving: DISABLED"
+    ;;
+esac
+
 exec spark-submit \
   --packages "$SPARK_KAFKA_PACKAGE" \
   src/streaming/review_streaming.py "$@"

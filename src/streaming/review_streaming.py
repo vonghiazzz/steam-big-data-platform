@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from functools import partial
 
 from dotenv import load_dotenv
 from pyspark.sql import functions as F
@@ -27,10 +28,19 @@ from src.common.config import (
     HDFS_SILVER_GAMES,
     HDFS_SILVER_REVIEWS,
     HDFS_SILVER_REVIEWS_INCREMENTAL_V1,
+    HDFS_STEAM_ROOT,
     PROJECT_ROOT,
 )
 from src.gold.gold_join import create_gold_dataset
 from src.schemas.steam_bronze_schema import REVIEW_DATA_SCHEMA
+from src.serving.realtime_mongodb_sink import (
+    RealtimeMongoConfig,
+    build_realtime_game_metrics,
+    ensure_realtime_mongodb,
+    prepare_recent_reviews,
+    write_realtime_metrics_batch,
+    write_recent_reviews_batch,
+)
 from src.silver.clean_reviews import transform_reviews
 from src.streaming.event_contract import REVIEW_CREATED
 
@@ -77,6 +87,8 @@ class StreamPaths:
     silver_checkpoint: str
     quarantine_checkpoint: str
     gold_checkpoint: str
+    mongodb_recent_checkpoint: str
+    mongodb_metrics_checkpoint: str
 
 
 def resolve_stream_paths() -> StreamPaths:
@@ -99,11 +111,23 @@ def resolve_stream_paths() -> StreamPaths:
         silver_checkpoint = f"{checkpoint_root}/review_silver_v1"
         quarantine_checkpoint = f"{checkpoint_root}/review_quarantine_v1"
         gold_checkpoint = f"{checkpoint_root}/review_gold_v1"
+        mongodb_recent_checkpoint = (
+            f"{checkpoint_root}/mongodb/recent_reviews"
+        )
+        mongodb_metrics_checkpoint = (
+            f"{checkpoint_root}/mongodb/realtime_game_metrics"
+        )
     else:
         bronze_checkpoint = HDFS_REVIEW_BRONZE_CHECKPOINT_V1
         silver_checkpoint = HDFS_REVIEW_SILVER_CHECKPOINT_V1
         quarantine_checkpoint = HDFS_REVIEW_QUARANTINE_CHECKPOINT_V1
         gold_checkpoint = HDFS_REVIEW_GOLD_CHECKPOINT_V1
+        mongodb_recent_checkpoint = (
+            f"{HDFS_STEAM_ROOT}/checkpoints/mongodb/recent_reviews"
+        )
+        mongodb_metrics_checkpoint = (
+            f"{HDFS_STEAM_ROOT}/checkpoints/mongodb/realtime_game_metrics"
+        )
 
     return StreamPaths(
         bronze_events=bronze_events,
@@ -114,6 +138,8 @@ def resolve_stream_paths() -> StreamPaths:
         silver_checkpoint=silver_checkpoint,
         quarantine_checkpoint=quarantine_checkpoint,
         gold_checkpoint=gold_checkpoint,
+        mongodb_recent_checkpoint=mongodb_recent_checkpoint,
+        mongodb_metrics_checkpoint=mongodb_metrics_checkpoint,
     )
 
 
@@ -372,6 +398,60 @@ def _gold_sink(
     return writer.start()
 
 
+def _mongodb_sink(
+    frame: DataFrame,
+    *,
+    callback,
+    checkpoint: str,
+    trigger_interval: str,
+    available_now: bool,
+    output_mode: str,
+):
+    writer = (
+        frame.writeStream.outputMode(output_mode)
+        .foreachBatch(callback)
+        .option("checkpointLocation", checkpoint)
+    )
+    if available_now:
+        writer = writer.trigger(availableNow=True)
+    else:
+        writer = writer.trigger(processingTime=trigger_interval)
+    return writer.start()
+
+
+def _start_mongodb_queries(
+    incremental_reviews: DataFrame,
+    *,
+    config: RealtimeMongoConfig,
+    paths: StreamPaths,
+    watermark_delay: str,
+    trigger_interval: str,
+    available_now: bool,
+) -> list:
+    recent_reviews = prepare_recent_reviews(incremental_reviews)
+    realtime_metrics = build_realtime_game_metrics(
+        recent_reviews,
+        watermark_delay,
+    )
+    recent_query = _mongodb_sink(
+        recent_reviews.drop("event_time_ts"),
+        callback=partial(write_recent_reviews_batch, config=config),
+        checkpoint=paths.mongodb_recent_checkpoint,
+        trigger_interval=trigger_interval,
+        available_now=available_now,
+        output_mode="append",
+    )
+    metrics_query = _mongodb_sink(
+        realtime_metrics,
+        callback=partial(write_realtime_metrics_batch, config=config),
+        checkpoint=paths.mongodb_metrics_checkpoint,
+        trigger_interval=trigger_interval,
+        available_now=available_now,
+        output_mode="update",
+    )
+    return [recent_query, metrics_query]
+
+
 def main() -> None:
     load_dotenv(PROJECT_ROOT / ".env", override=False)
     paths = resolve_stream_paths()
@@ -410,6 +490,14 @@ def main() -> None:
         "true",
         "yes",
     }
+    mongodb_realtime_enabled = os.getenv(
+        "MONGO_REALTIME_ENABLED",
+        "false",
+    ).lower() in {"1", "true", "yes"}
+    mongodb_config = None
+    if mongodb_realtime_enabled:
+        mongodb_config = RealtimeMongoConfig.from_environment()
+        ensure_realtime_mongodb(mongodb_config)
 
     output_paths = [
         paths.bronze_events,
@@ -504,7 +592,19 @@ def main() -> None:
                 available_now=True,
             )
             queries.append(gold_query)
-            gold_query.awaitTermination()
+            if mongodb_config is not None:
+                queries.extend(
+                    _start_mongodb_queries(
+                        incremental_reviews,
+                        config=mongodb_config,
+                        paths=paths,
+                        watermark_delay=watermark_delay,
+                        trigger_interval=trigger_interval,
+                        available_now=True,
+                    )
+                )
+            for query in queries[len(source_queries) :]:
+                query.awaitTermination()
         else:
             gold_query = _gold_sink(
                 gold,
@@ -514,6 +614,17 @@ def main() -> None:
                 available_now=False,
             )
             queries.append(gold_query)
+            if mongodb_config is not None:
+                queries.extend(
+                    _start_mongodb_queries(
+                        incremental_reviews,
+                        config=mongodb_config,
+                        paths=paths,
+                        watermark_delay=watermark_delay,
+                        trigger_interval=trigger_interval,
+                        available_now=False,
+                    )
+                )
             spark.streams.awaitAnyTermination()
     finally:
         for query in queries:
