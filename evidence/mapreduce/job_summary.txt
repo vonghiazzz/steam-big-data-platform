@@ -1,0 +1,101 @@
+hadoop_version=Hadoop 3.5.0
+streaming_jar=/opt/hadoop/share/hadoop/tools/lib/hadoop-streaming-3.5.0.jar
+input_path=/steam/bronze/reviews/*.jsonl
+output_path=/steam/mapreduce/game_recommendation_metrics
+reducers=1
+packageJobJar: [/tmp/hadoop-unjar13696203693878877586/] [] /tmp/streamjob7492353132062243891.jar tmpDir=null
+2026-09-30 03:32:39 INFO  DefaultNoHARMFailoverProxyProvider:64 - Connecting to ResourceManager at resourcemanager/192.168.148.4:8032
+2026-09-30 03:32:40 INFO  DefaultNoHARMFailoverProxyProvider:64 - Connecting to ResourceManager at resourcemanager/192.168.148.4:8032
+2026-09-30 03:32:40 INFO  JobResourceUploader:907 - Disabling Erasure Coding for path: /tmp/hadoop-yarn/staging/hadoop/.staging/job_1790739110845_0001
+2026-09-30 03:32:41 INFO  FileInputFormat:267 - Total input files to process : 50
+2026-09-30 03:32:41 INFO  JobSubmitter:203 - number of splits:50
+2026-09-30 03:32:41 INFO  JobSubmitter:299 - Submitting tokens for job: job_1790739110845_0001
+2026-09-30 03:32:41 INFO  JobSubmitter:300 - Executing with tokens: []
+2026-09-30 03:32:41 INFO  Configuration:2885 - resource-types.xml not found
+2026-09-30 03:32:41 INFO  ResourceUtils:476 - Unable to find 'resource-types.xml'.
+2026-09-30 03:32:42 INFO  YarnClientImpl:356 - Submitted application application_1790739110845_0001
+2026-09-30 03:32:42 INFO  Job:1681 - The url to track the job: http://resourcemanager:8088/proxy/application_1790739110845_0001/
+2026-09-30 03:32:42 INFO  Job:1726 - Running job: job_1790739110845_0001
+2026-09-30 03:32:48 INFO  Job:1747 - Job job_1790739110845_0001 running in uber mode : false
+2026-09-30 03:32:48 INFO  Job:1754 -  map 0% reduce 0%
+2026-09-30 03:32:56 INFO  Job:1754 -  map 12% reduce 0%
+2026-09-30 03:33:02 INFO  Job:1754 -  map 24% reduce 0%
+2026-09-30 03:33:09 INFO  Job:1754 -  map 36% reduce 0%
+2026-09-30 03:33:15 INFO  Job:1754 -  map 46% reduce 0%
+2026-09-30 03:33:20 INFO  Job:1754 -  map 50% reduce 0%
+2026-09-30 03:33:21 INFO  Job:1754 -  map 56% reduce 0%
+2026-09-30 03:33:26 INFO  Job:1754 -  map 66% reduce 19%
+2026-09-30 03:33:31 INFO  Job:1754 -  map 76% reduce 19%
+2026-09-30 03:33:32 INFO  Job:1754 -  map 76% reduce 25%
+2026-09-30 03:33:36 INFO  Job:1754 -  map 78% reduce 25%
+2026-09-30 03:33:37 INFO  Job:1754 -  map 86% reduce 25%
+2026-09-30 03:33:38 INFO  Job:1754 -  map 86% reduce 29%
+2026-09-30 03:33:40 INFO  Job:1754 -  map 88% reduce 29%
+2026-09-30 03:33:42 INFO  Job:1754 -  map 96% reduce 29%
+2026-09-30 03:33:44 INFO  Job:1754 -  map 98% reduce 32%
+2026-09-30 03:33:45 INFO  Job:1754 -  map 100% reduce 32%
+2026-09-30 03:33:47 INFO  Job:1754 -  map 100% reduce 100%
+2026-09-30 03:33:47 INFO  Job:1765 - Job job_1790739110845_0001 completed successfully
+2026-09-30 03:33:48 INFO  Job:1772 - Counters: 55
+	File System Counters
+		FILE: Number of bytes read=385506
+		FILE: Number of bytes written=17167791
+		FILE: Number of read operations=0
+		FILE: Number of large read operations=0
+		FILE: Number of write operations=0
+		HDFS: Number of bytes read=30859835
+		HDFS: Number of bytes written=1700
+		HDFS: Number of read operations=155
+		HDFS: Number of large read operations=0
+		HDFS: Number of write operations=2
+		HDFS: Number of bytes read erasure-coded=0
+	Job Counters 
+		Killed map tasks=1
+		Launched map tasks=50
+		Launched reduce tasks=1
+		Rack-local map tasks=50
+		Total time spent by all maps in occupied slots (ms)=247621
+		Total time spent by all reduces in occupied slots (ms)=37097
+		Total time spent by all map tasks (ms)=247621
+		Total time spent by all reduce tasks (ms)=37097
+		Total vcore-milliseconds taken by all map tasks=247621
+		Total vcore-milliseconds taken by all reduce tasks=37097
+		Total megabyte-milliseconds taken by all map tasks=253563904
+		Total megabyte-milliseconds taken by all reduce tasks=37987328
+	Map-Reduce Framework
+		Map input records=25000
+		Map output records=25000
+		Map output bytes=335500
+		Map output materialized bytes=385800
+		Input split bytes=5071
+		Combine input records=0
+		Combine output records=0
+		Reduce input groups=50
+		Reduce shuffle bytes=385800
+		Reduce input records=25000
+		Reduce output records=50
+		Spilled Records=50000
+		Shuffled Maps =50
+		Failed Shuffles=0
+		Merged Map outputs=50
+		GC time elapsed (ms)=2284
+		CPU time spent (ms)=128580
+		Physical memory (bytes) snapshot=15124377600
+		Virtual memory (bytes) snapshot=142926671872
+		Total committed heap usage (bytes)=8562671616
+		Peak Map Physical memory (bytes)=336773120
+		Peak Map Virtual memory (bytes)=2815361024
+		Peak Reduce Physical memory (bytes)=237260800
+		Peak Reduce Virtual memory (bytes)=2806034432
+	Shuffle Errors
+		BAD_ID=0
+		CONNECTION=0
+		IO_ERROR=0
+		WRONG_LENGTH=0
+		WRONG_MAP=0
+		WRONG_REDUCE=0
+	File Input Format Counters 
+		Bytes Read=30854764
+	File Output Format Counters 
+		Bytes Written=1700
+2026-09-30 03:33:48 INFO  StreamJob:1029 - Output directory: /steam/mapreduce/game_recommendation_metrics

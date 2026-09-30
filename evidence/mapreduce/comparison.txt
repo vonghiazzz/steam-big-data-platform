@@ -1,0 +1,13 @@
+MAPREDUCE VS SPARK
+appids=50
+reviews=25000
+positive=18321
+negative=6679
+missing_appids=0
+unexpected_appids=0
+count_mismatches=0
+positive_mismatches=0
+negative_mismatches=0
+rate_mismatches=0
+
+CROSS-CHECK: PASS
