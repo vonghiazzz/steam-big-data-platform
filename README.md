@@ -1,1578 +1,596 @@
-# BDA501 Steam Big Data Analytics
+# Steam Big Data Platform
 
-## Steam Game & Player Behavior Analytics with Recommendation Prediction
+## Overview
 
-Đây là đồ án cuối kỳ môn **BDA501 - Big Data Analytics**.
+This repository implements a local big-data platform for analysing Steam games and review behaviour. It combines a reproducible historical pipeline with an incremental review pipeline:
 
-Project xây dựng một kiến trúc Big Data end-to-end để thu thập, lưu trữ, xử lý, phân tích và khai thác dữ liệu game/review trên Steam.
+- HDFS stores replayable Bronze data and curated Silver/Gold data.
+- PySpark DataFrames and Spark SQL perform cleaning, joining, and analytics.
+- Kafka and Spark Structured Streaming process newly observed reviews.
+- Hadoop Streaming MapReduce independently cross-checks key Spark metrics.
+- MongoDB exposes historical aggregates and realtime materialized views to a future API.
+- Matplotlib produces evidence charts from Gold Analytics.
 
-Hệ thống kết hợp:
+The platform currently stops at MongoDB. A Backend API, frontend dashboard, and MLlib workloads are not implemented yet.
 
-- Python để thu thập dữ liệu từ Steam
-- HDFS cho distributed storage
-- MapReduce cho distributed aggregation
-- PySpark DataFrames và Spark SQL cho Data Engineering và Analytics
-- Parquet cho curated data
-- Kafka + Spark Structured Streaming cho incremental / near-real-time processing
-- Spark MLlib cho Machine Learning
-- MongoDB cho serving layer
-- Cluster / Cloud architecture cho khả năng scale
+## Current Status
 
-> **Implementation status:** catalog discovery/onboarding planning, canonical historical ingestion, and the validated HDFS Bronze → Silver → Gold batch path are implemented. Streaming V1 code supports `REVIEW_CREATED` only with bounded producer/Spark fixture tests; a live Kafka-to-HDFS smoke run remains pending. Review updates, price/metadata changes, MapReduce, MLlib, and MongoDB serving remain later work unless evidence states otherwise.
+| Component | Status | Purpose |
+|---|---|---|
+| Committed historical snapshot | Implemented | 50 games and 25,000 reviews for the project baseline |
+| HDFS Bronze upload and verification | Implemented | Load and verify immutable raw JSONL |
+| PySpark Silver | Implemented | Clean, type, validate, and deduplicate games/reviews |
+| Gold Base | Implemented | Join games and reviews into one review-level analytical dataset |
+| Spark Gold Analytics | Implemented | Produce nine reporting aggregates |
+| Visualization | Implemented | Generate six charts from Gold Analytics |
+| Hadoop Streaming MapReduce | Implemented | Independently validate recommendation metrics |
+| Kafka review producer | Implemented | Poll for and publish newly observed reviews |
+| Spark Structured Streaming | Implemented | Validate, deduplicate, archive, and enrich review events |
+| MongoDB Historical Serving V1 | Implemented | Serve Gold Analytics snapshots |
+| MongoDB Realtime Serving V2 | Implemented | Serve recent reviews and windowed realtime metrics |
+| Backend API | Not implemented — next | Read-only application interface over MongoDB |
+| Frontend dashboard | Not implemented — next | Visual and realtime consumer of the Backend API |
+| MLlib | Future | Additional modelling over Gold data |
 
-Tài liệu kiến trúc chi tiết bắt đầu tại [Project Overview](docs/00_PROJECT_OVERVIEW.md) và [Architecture](docs/01_ARCHITECTURE.md).
-
-Machine Learning của project tập trung dự đoán:
-
-```text
-voted_up
-
-true  -> 1 = Recommend
-false -> 0 = Not Recommend
-```
-
-dựa trên **player behavior + game metadata**.
-
-Model chính **không sử dụng `review` text**, do đó không tập trung vào NLP.
-
----
-
-# 1. Problem Statement
-
-Steam tạo ra dữ liệu liên tục về:
-
-- games
-- reviews
-- recommendation behavior
-- playtime
-- purchase behavior
-- votes
-- price
-- game metadata
-
-Project giải quyết hai bài toán chính.
-
-## 1.1 Big Data Analytics
-
-Phân tích hành vi người chơi và đặc điểm game:
-
-- Recommendation rate theo game
-- Recommendation rate theo `genres`
-- Playtime và recommendation behavior
-- Free vs Paid games
-- Review volume
-- Game engagement
-- Purchase / free-copy behavior
-
-## 1.2 Machine Learning
-
-Câu hỏi chính:
-
-> Can player behavior and game characteristics be used to predict whether a Steam user recommends a game?
-
-Target:
+## Architecture
 
 ```text
-voted_up
+                              Steam API
+                                  |
+                   +--------------+--------------+
+                   |                             |
+              Historical                    Incremental
+                   |                             |
+       committed JSONL snapshot             Review Producer
+                   |                             |
+                   v                             v
+             HDFS Bronze                      Kafka
+                   |                             |
+                   v                             v
+          PySpark Batch ETL            Structured Streaming
+                   |                    |        |         |
+                   v                    |        |         +--> MongoDB recent_reviews
+                Silver                  |        |
+                   |                    |        +------------> MongoDB realtime_game_metrics
+                   v                    |
+              Gold Base                 +---------------------> HDFS incremental data
+                   |
+                   +--> Spark Analytics --> Gold Analytics
+                   |                           |       |
+                   |                           |       +--> MongoDB historical serving
+                   |                           +----------> Visualization
+                   |
+                   +--> future MLlib
 
-true  -> 1 = Recommend
-false -> 0 = Not Recommend
+     Bronze reviews --> Hadoop Streaming MapReduce
+                              |
+                              +--> cross-check Spark game_metrics
 ```
 
----
+Historical and realtime execution are separate paths. Kafka and MongoDB use separate Compose files, while Hadoop is an external prerequisite for this repository.
 
-# 2. Big Data Justification - 5V
+## Data Layers and Source of Truth
 
-## Volume
+Data ownership is deliberately separated:
 
-Development sample hiện tại:
+- **HDFS and Kafka** provide source data, history, and replay capability.
+- **HDFS Gold** is the analytical source of truth.
+- **MongoDB** is a serving/materialized-view layer. It does not replace Gold or HDFS.
 
-```text
-50 games
-25,000 reviews
-18,321 Positive
-6,679 Negative
-98 empty reviews
-```
+The medallion layers are:
 
-Dataset hiện tại là sample dùng để phát triển và kiểm chứng pipeline.
+| Layer | Meaning |
+|---|---|
+| Bronze | Raw, replayable historical records and archived stream events |
+| Silver | Cleaned, typed, validated, and deduplicated data |
+| Gold Base | Review-level joined dataset suitable for analytics or future ML |
+| Gold Analytics | Precomputed aggregate datasets for reporting and serving |
 
-Kiến trúc được thiết kế để scale khi số game, review và event tăng lên quy mô lớn hơn.
+`/steam/gold/base` contains one row per historical review. `/steam/gold/analytics/*` contains aggregates derived from that base. Historical Serving V1 copies those aggregates to MongoDB; Realtime Serving V2 maintains separate incremental views.
 
-HDFS được sử dụng cho distributed storage.
+### Validated historical project baseline
 
-Parquet được sử dụng cho curated datasets nhằm hỗ trợ:
+Repository evidence confirms this project snapshot, not global Steam totals:
 
-- columnar storage
-- compression
-- efficient analytical reads
-- Spark processing
-
-## Velocity
-
-Dữ liệu Steam có thể thay đổi liên tục thông qua các event như:
-
-```text
-new_review
-vote_update
-price_update
-game_metadata_update
-```
-
-Kafka và Spark Structured Streaming được thiết kế để xử lý incremental updates thay vì recompute toàn bộ dataset sau mỗi thay đổi.
-
-## Variety
-
-Project xử lý nhiều dạng dữ liệu:
-
-```text
-game metadata
-review metadata
-player behavior
-numerical fields
-boolean fields
-categorical fields
-timestamps
-arrays
-nested JSON
-streaming events
-```
-
-## Veracity
-
-Raw data có thể chứa:
-
-```text
-duplicate recommendationid
-missing appid
-missing metadata
-empty review
-invalid datatype
-abnormal playtime
-duplicate event
-late event
-```
-
-Pipeline vì vậy cần:
-
-- explicit schema
-- validation
-- deduplication
-- type casting
-- null handling
-- key validation
-- row-count reconciliation
-
-## Value
-
-Dữ liệu sau xử lý được sử dụng cho:
-
-```text
-player behavior analytics
-game analytics
-recommendation prediction
-dashboard / reporting
-MongoDB serving
-near-real-time updates
-```
-
----
-
-# 3. End-to-End Architecture
-
-![Steam Big Data End-to-End Architecture](docs/assets/image.png)
-
-Hình trên mô tả shared data lake và downstream platform. Phần flow dưới đây là source of truth mới cho discovery, registry và polling. “Steam events” là event do hệ thống tạo sau khi polling phát hiện thay đổi; Steam không được giả định cung cấp native push stream.
-
-```text
-Steam API
-    |
-Periodic Catalog Discovery
-    |
-Qualification
-    |
-Game Onboarding Policy
-    |
-Game Registry / Watchlist
-    |
-    +-- NEW ------> Historical Backfill ------> HDFS Bronze
-    |
-    +-- ACTIVE ---> Incremental API Polling
-                        |
-                  detect changes
-                        |
-                      Kafka
-                    /       \
-                   v         v
-          Raw Event Archive  Structured Streaming
-              HDFS Bronze             |
-                                      v
-                                   Silver
-
-HDFS Bronze
-    +-- PySpark Batch ETL -----------> Silver
-    +-- MapReduce Aggregation -------+ validate against Spark
-
-Silver -> Gold -> Spark SQL / MLlib / MongoDB
-```
-
-`selected_50_games.jsonl` là initial research snapshot cho experiment 50 game / 25,000 review, không phải giới hạn kiến trúc. Dynamic Registry / Watchlist cho phép onboarding game mới trong tương lai.
-
-- **NEW game:** chạy historical backfill một lần, giữ raw API records và đưa vào HDFS Bronze.
-- **ACTIVE game:** incremental polling, detect changes và tạo event. Không full recrawl ở mỗi discovery cycle.
-
-Discovery/qualification là scope definition dựa trên metadata completeness, review availability/volume, crawl feasibility và diversity; không phải review cleaning/feature engineering và không dùng `voted_up` hoặc recommendation rate để chọn game.
-
-## Discovery Policy — Current Defaults
-
-| Setting | Default |
+| Check | Expected |
 |---|---:|
-| Game type | `game` |
-| Minimum release age | 30 days |
-| Minimum total reviews | 1,000 |
-| Metadata | required |
-| Review endpoint | required |
-| Historical sample | 500 reviews/game |
-| Initial research cohort | 50 games |
-| Maximum new games/cycle | 10 |
-| Discovery | `WEEKLY` |
-| Retries | 3 |
-
-Các ngưỡng nằm trong `config/discovery_policy.json` và có thể thay đổi mà không sửa thuật toán. `min_playtime_minutes` mặc định là `null` (tắt), vì playtime được giữ làm feature EDA/ML. Cohort 50 game hiện tại là research snapshot có thể tái lập, không phải giới hạn kiến trúc. Admin API/UI để quản lý policy là **Planned / Design-only**; kiến trúc end-to-end không thay đổi.
-
-Batch và Streaming **không phải hai hệ thống riêng biệt**. Cả hai hội tụ vào authoritative HDFS Bronze/Silver/Gold platform.
-
-Cả hai cùng hội tụ vào data platform:
-
-```text
-Bronze
-  |
-Silver
-  |
-Gold
-```
-
----
-
-# 4. Batch Processing Path
-
-Batch chịu trách nhiệm:
-
-- historical ingestion
-- backfill
-- full recomputation
-- schema migration
-- cleaning-rule changes
-- rebuild Silver / Gold
-
-Flow:
-
-```text
-NEW qualified game
-    |
-Historical Backfill / Python Crawler
-    |
-HDFS Bronze
-    |
-PySpark ETL
-    |
-Silver Parquet
-    |
-Gold
-```
-
-Batch vẫn cần thiết ngay cả khi có Streaming.
-
-Nếu business rule hoặc schema thay đổi, toàn bộ dataset có thể được rebuild lại từ Bronze.
-
-Canonical batch 50 game / 25.000 review đã hoàn thành và được xác minh qua HDFS Bronze → Silver → Gold.
-
----
-
-# 5. Streaming Processing Path (V1 Implemented / Live Smoke Pending)
-
-Streaming dự kiến xử lý dữ liệu mới hoặc thay đổi gần real-time. Steam API được polling cho các game `ACTIVE`; producer so sánh state và chỉ tạo event khi phát hiện thay đổi.
-
-Flow:
-
-```text
-ACTIVE games
-     |
-Steam API Polling
-     |
-Detect Changes / Create Events
-     |
-Kafka
-   /   \
-  v     v
-Raw Event Archive       Spark Structured Streaming
-HDFS Bronze             -> validate/dedup/watermark/state
-                        -> Silver / Gold incremental update
-```
-
-Các event dự kiến:
-
-```text
-new_review
-vote_update
-price_update
-game_metadata_update
-```
-
-Event schema concept:
-
-```text
-event_id
-event_type
-event_time
-appid
-recommendationid
-payload
-```
-
-Kafka topic dự kiến:
-
-```text
-steam_events
-```
-
-Partition key ưu tiên:
-
-```text
-appid
-```
-
-khi cần group các update của cùng game.
-
-Streaming V1 hiện đã có event producer và Structured Streaming cho `REVIEW_CREATED`; live Kafka-to-HDFS smoke evidence vẫn chưa được thiết lập. Các loại update khác thuộc V2.
-
----
-
-# 6. Streaming Reliability (V1)
-
-Đây là reliability design cho planned streaming component, không phải implemented evidence.
-
-Hệ thống phải xử lý các vấn đề sau.
-
-## 6.1 Schema Validation
-
-Incoming JSON được parse bằng explicit schema.
-
-Invalid events được chuyển sang rejected / bad-record path thay vì làm crash toàn bộ stream.
-
-## 6.2 Deduplication
-
-Ưu tiên sử dụng:
-
-```text
-event_id
-```
-
-hoặc business key phù hợp:
-
-```text
-recommendationid
-+ event_type
-+ event_time
-```
-
-## 6.3 Event-Time
-
-Streaming sử dụng:
-
-```text
-event_time
-```
-
-để xử lý event theo thời điểm thực sự xảy ra.
-
-## 6.4 Watermark
-
-Watermark hỗ trợ xử lý late-arriving events và giới hạn lượng state phải giữ.
-
-## 6.5 Stateful Processing
-
-State có thể được sử dụng để cập nhật incremental metrics:
-
-```text
-review_count
-positive_count
-recommendation_rate
-average_playtime
-```
-
-## 6.6 Checkpoint
-
-Structured Streaming checkpoint lưu:
-
-```text
-source progress
-offset information
-state
-recovery metadata
-```
-
-Nếu streaming job bị crash, Spark có thể tiếp tục từ checkpoint.
-
-## 6.7 Idempotent Write
-
-MongoDB hoặc downstream sink sử dụng key-based upsert.
-
-Event bị replay không được tạo duplicate logical record.
-
----
-
-# 7. Data Lake Architecture
-
-Project sử dụng mô hình:
-
-```text
-Bronze
-  |
-Silver
-  |
-Gold
-```
-
-HDFS là authoritative Data Lake cho cả ba layer. `data/raw/` local chỉ là crawl/staging/backup; không được mô tả là authoritative Bronze/Silver/Gold.
-
-## 7.1 Bronze Layer
-
-Bronze giữ raw source-of-truth.
-
-Ví dụ:
-
-```text
-games_raw.jsonl
-reviews
-review_pages
-stream_events
-```
-
-Đặc điểm:
-
-```text
-raw
-immutable
-replayable
-historical evidence
-minimal transformation
-```
-
-Current HDFS Bronze đã được triển khai.
-
-## 7.2 Silver Layer
-
-Silver là dữ liệu:
-
-```text
-clean
-typed
-validated
-deduplicated
-normalized
-```
-
-Processing bao gồm:
-
-```text
-explicit schema
-parsing
-validation
-type casting
-timestamp conversion
-null handling
-key validation
-deduplication
-normalization
-Bronze/Silver row-count reconciliation
-```
-
-Output dự kiến:
-
-```text
-Parquet
-```
-
-## 7.3 Gold Layer
-
-Gold là dữ liệu business-ready.
-
-Gold chịu trách nhiệm join/enrich Silver reviews với game metadata, tạo derived analytical fields, và xây dựng aggregate/business datasets cho analytics và ML. Các phép join/enrichment này không thuộc Bronze-to-Silver.
-
-Gold được chia thành hai nhóm chính.
-
-### Gold Analytics
-
-Ví dụ:
-
-```text
-genre recommendation rate
-playtime bucket analytics
-Free vs Paid analytics
-game-level metrics
-engagement metrics
-```
-
-### Gold ML-ready
-
-Ví dụ:
-
-```text
-clean features
-recommendation label
-encoded categorical features
-player behavior
-game metadata
-```
-
----
-
-# 8. Current Dataset
-
-Development dataset hiện tại:
-
-```text
-Games              : 50
-Reviews            : 25,000
-Positive voted_up  : 18,321
-Negative voted_up  : 6,679
-Empty reviews      : 98
-```
-
-Dataset hiện tại dùng để:
-
-- development
-- validation
-- Spark pipeline design
-- analytics
-- ML experiments
-
-Đây là fixed/versioned initial research cohort để reproduce EDA, ML và benchmark. Nó không phải permanent architecture limit; scalable design sử dụng dynamic Game Registry / Watchlist.
-
----
-
-# 9. Games Dataset
-
-Main fields:
-
-```text
-appid
-name
-developers
-publishers
-genres
-categories
-is_free
-price_overview
-platforms
-release_date
-```
-
-Primary identifier:
-
-```text
-appid
-```
-
----
-
-# 10. Reviews Dataset
-
-Main fields:
-
-```text
-recommendationid
-appid
-review
-language
-voted_up
-timestamp_created
-timestamp_updated
-votes_up
-votes_funny
-weighted_vote_score
-steam_purchase
-received_for_free
-playtime_forever
-playtime_at_review
-```
-
-Primary identifier:
-
-```text
-recommendationid
-```
-
-Join:
-
-```text
-games.appid = reviews.appid
-```
-
----
-
-# 11. ETL with PySpark (Next — Not Yet Implemented)
-
-Canonical Bronze-to-Silver và Silver-to-Gold PySpark đã được triển khai; streaming ghi vào các incremental path riêng và không overwrite batch baseline.
-
-ETL:
-
-```text
-Extract
-Transform
-Load
-```
-
-Trong project:
-
-```text
-HDFS Bronze
--> PySpark explicit schema / parsing / validation
--> cleaning / typing / timestamp conversion / null handling
--> deduplication / key validation / normalization
--> Silver Parquet
-
-Silver
--> join and enrich reviews with game metadata
--> derive analytical fields and aggregate business datasets
--> Gold Analytics / Gold ML-ready
-```
-
-PySpark là primary processing framework của project.
-
----
-
-# 12. Bronze to Silver (Next — Not Yet Implemented)
-
-Main pipeline:
-
-```text
-HDFS Bronze
-    |
-Explicit Schema
-    |
-Parsing
-    |
-Data Quality Validation
-    |
-Type Casting
-    |
-Timestamp Conversion
-    |
-Null Handling
-    |
-Deduplication
-    |
-Key Validation
-    |
-Normalization
-    |
-Silver Parquet
-    |
-Bronze/Silver Row-count Reconciliation
-```
-
-Bronze-to-Silver không phải stage join/enrich chính giữa reviews và game metadata. Nó tạo các dataset Silver sạch, typed, validated và replayable từ Bronze.
-
----
-
-# 13. Silver to Gold (Planned)
-
-Silver reviews được enrich bằng Games metadata:
-
-```text
-reviews.appid
-=
-games.appid
-```
-
-Silver-to-Gold chịu trách nhiệm:
-
-- join/enrich reviews với game metadata
-- tạo derived analytical fields
-- tạo aggregate/business datasets
-- tạo analytics-ready datasets
-- tạo ML-ready datasets
-
-Gold Base dự kiến chứa:
-
-```text
-appid
-recommendationid
-genres
-categories
-platforms
-is_free
-price
-playtime_at_review
-playtime_forever
-playtime_hours
-steam_purchase
-received_for_free
-voted_up
-recommendation_label
-timestamp_created
-```
-
-Derived fields:
-
-```text
-recommendation_label
-playtime_hours
-playtime_bucket
-price_bucket
-```
-
----
-
-# 14. MapReduce Component (Planned)
-
-MapReduce dự kiến được sử dụng cho game-level review aggregation và được validate độc lập bằng PySpark.
-
-Mapper:
-
-```text
-appid -> (1, voted_up, playtime_at_review)
-```
-
-Shuffle:
-
-```text
-group by appid
-```
-
-Reducer:
-
-```text
-review_count
-positive_count
-recommendation_rate
-average_playtime
-```
-
-Output:
-
-```text
-appid
-review_count
-positive_count
-recommendation_rate
-average_playtime
-```
-
-MapReduce result sẽ được validate bằng PySpark:
-
-```text
-groupBy(appid)
-```
-
-với cùng metrics.
-
----
-
-# 15. Spark SQL & EDA (Planned)
-
-EDA chạy trên curated Silver / Gold datasets.
-
-EDA không làm lại raw cleaning.
-
-## Q1 - Recommendation Rate by Genre
-
-```text
-genre
-review_count
-positive_count
-recommendation_rate
-average_playtime
-```
-
-## Q2 - Playtime vs Recommendation
-
-Playtime buckets:
-
-```text
-0-2 hours
-2-10 hours
-10-50 hours
-50+ hours
-```
-
-Metrics:
-
-```text
-review_count
-recommendation_rate
-```
-
-## Q3 - Free vs Paid
-
-Compare:
-
-```text
-review_count
-average_playtime
-recommendation_rate
-```
-
-## Q4 - Game Engagement
-
-Analyze:
-
-```text
-review_count
-votes_funny
-weighted_vote_score
-average_playtime
-```
-
-EDA còn kiểm tra:
-
-```text
-voted_up class balance
-playtime distribution
-outliers
-missing metadata
-feature leakage
-```
-
----
-
-# 16. Spark Query Plan (Planned)
-
-Ít nhất một analytical query sẽ được phân tích bằng:
-
-```python
-df.explain("formatted")
-```
-
-Các physical operators cần quan sát:
-
-```text
-Scan
-Filter
-Aggregate
-Exchange
-Shuffle
-SortMergeJoin
-BroadcastHashJoin
-```
-
-Query-plan evidence được lưu trong:
-
-```text
-evidence/
-```
-
----
-
-# 17. Machine Learning (Planned)
-
-ML task:
-
-```text
-Binary Classification
-```
-
-Target:
-
-```text
-voted_up
-
-true  -> 1
-false -> 0
-```
-
-Primary model không sử dụng:
-
-```text
-review
-```
-
-text.
-
----
-
-# 18. Machine Learning Features
-
-## Player Behavior
-
-```text
-playtime_at_review
-playtime_forever
-steam_purchase
-received_for_free
-```
-
-## Game Metadata
-
-```text
-is_free
-price
-genres
-platforms
-categories
-```
-
-Các field như:
-
-```text
-votes_up
-weighted_vote_score
-```
-
-không được đưa vào primary prediction model nếu chúng tạo post-review leakage hoặc không phù hợp với prediction-time scenario.
-
----
-
-# 19. PySpark ML Pipeline (Planned)
-
-```text
-Gold ML-ready Dataset
-        |
-StringIndexer
-        |
-OneHotEncoder
-        |
-VectorAssembler
-        |
-Train/Test Split
-        |
-+----------------------+
-| Logistic Regression  |
-+----------------------+
-           VS
-+----------------------+
-| Random Forest        |
-+----------------------+
-        |
-Evaluation
-```
-
-Train/Test split dự kiến:
-
-```text
-80% Train
-20% Test
-seed = 42
-```
-
----
-
-# 20. ML Evaluation
-
-Evaluation metrics:
-
-```text
-Accuracy
-Precision
-Recall
-F1-score
-ROC-AUC
-Confusion Matrix
-```
-
-Logistic Regression:
-
-```text
-linear baseline
-fast
-interpretable
-```
-
-Random Forest:
-
-```text
-nonlinear model
-feature interactions
-feature importance
-```
-
-Không kết luận model nào tốt hơn cho tới khi có measured results.
-
----
-
-# 21. MongoDB Serving (Planned / Design-only)
-
-MongoDB được thiết kế làm serving layer cho processed và model outputs; component này chưa được triển khai.
-
-## Collection: game_summary
-
-Key:
-
-```text
-appid
-```
-
-Fields:
-
-```text
-name
-genres
-review_count
-positive_rate
-average_playtime
-last_updated
-```
-
-## Collection: genre_analytics
-
-Key:
-
-```text
-genre
-```
-
-Fields:
-
-```text
-game_count
-review_count
-positive_rate
-average_playtime
-price_distribution
-```
-
-## Collection: model_predictions
-
-Key:
-
-```text
-recommendationid
-```
-
-Fields:
-
-```text
-prediction
-probability
-model_version
-prediction_time
-```
-
-Batch path:
-
-```text
-Gold
-→ Spark
-→ MongoDB upsert
-```
-
-Streaming path:
-
-```text
-Structured Streaming
-→ foreachBatch
-→ MongoDB upsert
-```
-
----
-
-# 22. Infrastructure
-
-## HDFS
-
-Status: HDFS Bronze storage/upload/verification is implemented. Silver and Gold storage are planned outputs of the next pipelines.
-
-Responsibilities:
-
-```text
-Bronze storage
-Silver storage
-Gold storage
-replication
-distributed storage
-raw replay
-```
-
-## Kafka
-
-Status: **Planned / Design-only**.
-
-Responsibilities:
-
-```text
-event ingestion
-buffering
-retention
-partitioning
-producer / consumer decoupling
-```
-
-## Spark Cluster
-
-Status: deployment options documented; actual broader cluster deployment/performance evidence remains **Planned**.
-
-Possible cluster managers:
-
-```text
-Standalone
-YARN
-Kubernetes
-```
-
-Execution concept:
-
-```text
-Driver
-   |
-Executors
-   |
-Partitions
-```
-
----
-
-# 23. Monitoring & Fault Tolerance
-
-Status: **Planned / Design-only**, except monitoring and HDFS evidence already produced by implemented components.
-
-Monitoring / observability:
-
-```text
-Spark UI
-driver logs
-executor logs
-Kafka consumer lag
-MongoDB metrics
-processing latency
-```
-
-Fault tolerance:
-
-```text
-HDFS replication
-Kafka retention
-Structured Streaming checkpoint
-state recovery
-idempotent MongoDB upsert
-```
-
----
-
-# 24. Scalability & Performance Experiments
-
-Ít nhất một controlled experiment sẽ được chạy.
-
-## Experiment A - Input Scale
-
-```text
-1x reviews
-5x reviews
-10x reviews
-```
-
-Measure:
-
-```text
-runtime
-partitions
-shuffle read
-shuffle write
-```
-
-## Experiment B - Join Strategy
-
-Compare:
-
-```text
-SortMergeJoin
-vs
-BroadcastHashJoin
-```
-
-## Experiment C - Streaming Micro-Batch
-
-Compare:
-
-```text
-1-minute interval
-vs
-5-minute interval
-```
-
-Measure:
-
-```text
-latency
-processedRowsPerSecond
-state size
-```
-
-Chỉ measured experiment mới được ghi là implemented evidence.
-
----
-
-# 25. Project Structure
+| Games | 50 |
+| Reviews | 25,000 |
+| Unique `recommendationid` | 25,000 |
+| Positive reviews | 18,321 |
+| Negative reviews | 6,679 |
+| Gold Base grain | One row per review |
+
+## Implemented Components
+
+- `src/hdfs/`: Bronze upload support and integrity verification.
+- `src/processing/`, `src/silver/`, `src/gold/`: historical Bronze validation, Silver cleaning, and Gold Base construction.
+- `src/analytics/`: nine Spark aggregate datasets.
+- `src/visualization/`: six evidence charts generated from Gold Analytics.
+- `src/mapreduce/`: mapper, reducer, and comparison with Spark output.
+- `src/streaming/`: the review event contract, producer state, producer, and Structured Streaming job.
+- `src/serving/`: historical and realtime MongoDB writers.
+- `src/discovery/`: catalog qualification and game-registry control-plane utilities.
+
+## Repository Structure
 
 ```text
 .
-├── README.md
-├── requirements.txt
-├── .gitignore
-│
-├── config/
-│
-├── data/
-│   ├── raw/
-│   ├── bronze/
-│   ├── silver/
-│   └── gold/
-│
-├── evidence/
-├── output/
-├── scripts/
-│
-└── src/
-    ├── common/
-    ├── discovery/
-    ├── selection/
-    ├── ingestion/
-    ├── validation/
-    ├── hdfs/
-    ├── mapreduce/
-    ├── batch/
-    ├── streaming/
-    ├── analytics/
-    ├── ml/
-    └── serving/
+├── compose.mongodb.yaml       # MongoDB serving infrastructure
+├── compose.streaming.yaml     # Kafka KRaft infrastructure
+├── data/                      # committed project snapshot plus ignored runtime state
+├── docs/                      # design and operating documentation
+├── evidence/                  # validated counts, comparisons, and generated charts
+├── scripts/                   # supported operational runners
+├── src/
+│   ├── analytics/             # Gold aggregate jobs
+│   ├── gold/                  # Gold Base job
+│   ├── hdfs/                  # Bronze upload and verification
+│   ├── mapreduce/             # Hadoop Streaming cross-check
+│   ├── serving/               # MongoDB V1/V2 writers
+│   ├── silver/                # Silver jobs
+│   ├── streaming/             # producer and Structured Streaming
+│   └── visualization/         # chart generation
+└── tests/                     # unit and Spark regression tests
 ```
 
----
+## Prerequisites
 
-# 26. Current Status
+- Git.
+- Python 3.10+ and a virtual environment.
+- Docker with Docker Compose. Docker Desktop, OrbStack, or another compatible runtime is acceptable.
+- A running Hadoop/HDFS environment accessible to both Docker and local Spark. The scripts default to a NameNode container named `bda501-namenode`.
+- A local `spark-submit`. The recorded validation used Spark 4.2.0; the default Kafka connector coordinate in the streaming runner also targets Spark 4.2.0 and Scala 2.13.
+- A Java runtime compatible with the installed Spark distribution.
+- Internet access when the producer calls Steam and when Spark first resolves the Kafka connector package.
 
-| Component | Status |
-|---|---|
-| Steam discovery | Done |
-| Catalog qualification | Done |
-| Initial 50-game research cohort | Done |
-| Local JSONL Registry / onboarding plan V1 | Done |
-| Production Registry / Watchlist automation | Design-only |
-| Steam ingestion | Done |
-| Raw-data validation | Done |
-| Bronze-ready validation | Done |
-| HDFS Bronze | Done |
-| Project refactor | Done |
-| PySpark Bronze -> Silver | **Next — not yet implemented** |
-| Silver -> Gold | Planned |
-| MapReduce aggregation | Planned |
-| Spark SQL / EDA | Planned |
-| Kafka / Structured Streaming | V1 implemented; live smoke pending |
-| Spark MLlib | Planned |
-| MongoDB Serving | Planned |
-| Performance experiment | Planned |
-| Cluster deployment design | Planned |
-| Final report / demo | Planned |
+The Python requirements do not install Spark/PySpark; install Spark separately. Kafka 3.9.1 and MongoDB 8.0 are defined by the repository Compose files.
 
----
+> **Hadoop setup boundary:** this repository does not contain a Hadoop Compose file or a one-command Hadoop bootstrap. Start the course/lab Hadoop cluster separately before using HDFS-dependent commands.
 
-# 27. Team Responsibilities
+## Quick Start
 
-| Member | Primary Ownership |
-|---|---|
-| Bình | HDFS, MapReduce, Raw Validation |
-| Khánh | PySpark Data Engineering, Streaming |
-| Nghĩa | EDA, Spark SQL, Visualization, NoSQL |
-| Huy | Machine Learning, Performance, Deployment |
+The following sections are intentionally separate. There is no supported `run_everything.sh` command.
 
-Cross-checks được thực hiện ở integration checkpoints.
-
----
-
-# 28. Git Workflow
-
-Main branch:
-
-```text
-main
-```
-
-Feature branches:
-
-```text
-feature/binh-hdfs-mapreduce
-feature/khanh-pyspark-streaming
-feature/nghia-analytics-nosql
-feature/huy-ml-performance
-```
-
-Development flow:
-
-```text
-Feature Branch
-      |
-      v
-Pull Request
-      |
-      v
-    main
-```
-
-Không phát triển feature mới trực tiếp trên `main`.
-
----
-
-# 29. Python Environment
-
-Current Python dependencies được lưu trong:
-
-```text
-requirements.txt
-```
-
-File hiện tại được tạo bằng:
+## 1. Clone and Configure
 
 ```bash
-python3 -m pip freeze > requirements.txt
-```
+git clone https://github.com/vonghiazzz/steam-big-data-platform.git
+cd steam-big-data-platform
 
-Điều này có nghĩa `requirements.txt` phản ánh chính xác Python packages đang cài trong development environment tại thời điểm freeze.
-
-Khi thêm PySpark, Kafka client, MongoDB client hoặc các package mới:
-
-```text
-install dependency
-→ verify implementation
-→ freeze requirements again
-```
-
-Không tự thêm version chưa được kiểm chứng.
-
----
-
-# 30. Environment Setup
-
-Create virtual environment:
-
-```bash
 python3 -m venv .venv
-```
-
-Activate:
-
-```bash
 source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+
+cp .env.example .env
 ```
 
-Install dependencies:
+Replace every `CHANGE_ME` value in `.env`. Do not commit `.env`, credentials, or private endpoints. Common local values are:
+
+| Variable | Typical local value or meaning |
+|---|---|
+| `KAFKA_HOST_PORT` | `9092` |
+| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` |
+| `KAFKA_TOPIC` | `steam_events` |
+| `KAFKA_TOPIC_PARTITIONS` | `3` |
+| `KAFKA_RETENTION_MS` | `86400000` |
+| `KAFKA_RETENTION_BYTES` | `536870912` |
+| `KAFKA_LOG_SEGMENT_BYTES` | `67108864` |
+| `KAFKA_COMPRESSION_TYPE` | `gzip` |
+| `HADOOP_NAMENODE_CONTAINER` | `bda501-namenode`, or the actual container name |
+| `HDFS_DEFAULT_FS` | An HDFS URI reachable by the process running Spark, such as `hdfs://<namenode-host>:8020` |
+| `STREAM_AVAILABLE_NOW` | `false` for continuous mode; `true` for bounded processing |
+| `MONGO_URI` | `mongodb://localhost:27017` |
+| `MONGO_DATABASE` | `steam_analytics` |
+
+Complete the remaining `CHANGE_ME` entries with the repository's safe local defaults unless the environment requires different limits:
+
+```dotenv
+STREAM_POLL_INTERVAL_SECONDS=600
+STREAM_MIN_POLL_INTERVAL_SECONDS=300
+STREAM_REQUEST_DELAY_SECONDS=1.0
+STREAM_MAX_PAGES_PER_GAME=3
+STREAM_MAX_ACTIVE_GAMES=100
+STREAM_MIN_FREE_GB=5
+STREAM_BOOTSTRAP_SOURCE=hdfs
+STREAM_BOOTSTRAP_MAX_IDS_PER_GAME=1000
+STREAM_SPARK_TRIGGER_INTERVAL=1 minute
+STREAM_WATERMARK_DELAY=7 days
+STREAM_MAX_OFFSETS_PER_TRIGGER=1000
+STREAM_SPARK_SHUFFLE_PARTITIONS=3
+STREAM_AVAILABLE_NOW=false
+STREAM_HDFS_REPLICATION=1
+```
+
+Set `HDFS_DEFAULT_FS` separately to the reachable NameNode URI. The producer enforces its safety minimums; keep the optional fixture override variables unset outside tests.
+
+For local batch commands, prepare a portable shell environment from the running NameNode container:
 
 ```bash
-python3 -m pip install -r requirements.txt
+export HADOOP_NAMENODE_CONTAINER="${HADOOP_NAMENODE_CONTAINER:-bda501-namenode}"
+export HDFS_DEFAULT_FS="hdfs://$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$HADOOP_NAMENODE_CONTAINER"):8020"
+export HADOOP_USER_NAME="${HADOOP_USER_NAME:-hadoop}"
+export PYTHONPATH="$PWD/src${PYTHONPATH:+:$PYTHONPATH}"
 ```
 
-Check:
+This resolves the current container address at runtime; do not copy an address from another developer's machine.
+
+## 2. Start Infrastructure
+
+### Hadoop/HDFS
+
+Start the external course/lab Hadoop environment first, then check it:
 
 ```bash
-python3 --version
-java --version
+docker ps --filter "name=$HADOOP_NAMENODE_CONTAINER"
+docker exec "$HADOOP_NAMENODE_CONTAINER" hdfs dfsadmin -report
 ```
 
-Khi PySpark đã được cài:
+### Kafka
 
 ```bash
-python3 -c "import pyspark; print(pyspark.__version__)"
+docker compose -f compose.streaming.yaml up -d
+bash scripts/create_streaming_topic.sh
+docker compose -f compose.streaming.yaml ps
 ```
 
----
+### MongoDB
 
-# 31. Data Policy
+```bash
+docker compose -f compose.mongodb.yaml up -d
+docker compose -f compose.mongodb.yaml ps
+docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{end}}' steam-mongodb
+```
 
-Large datasets không được commit lên Git.
+Kafka and MongoDB are independent Compose projects. Starting either one does not start Hadoop or Spark.
 
-Các path local / generated:
+## 3. Prepare / Verify Historical Data
+
+The canonical historical input is committed:
+
+- `data/raw/landing/games/games_raw.jsonl` — 50 raw game records.
+- `data/raw/bronze_ready/reviews_by_game/*.jsonl` — 50 files with 500 reviews each.
+
+Verify the local snapshot, upload it to the running HDFS cluster, then verify HDFS:
+
+```bash
+python src/hdfs/verify_bronze_integrity.py --source local
+CONTAINER="$HADOOP_NAMENODE_CONTAINER" bash src/hdfs/upload_bronze.sh
+python src/hdfs/verify_bronze_integrity.py \
+  --source hdfs \
+  --container "$HADOOP_NAMENODE_CONTAINER" \
+  --out evidence/hdfs/bronze_verification.txt
+```
+
+The upload targets `/steam/bronze/games` and `/steam/bronze/reviews`. It refuses to overwrite existing Bronze data by default. Preserve that safety behaviour unless performing an intentional, controlled rebuild.
+
+Run the Spark Bronze schema/count validation when local Spark can reach HDFS:
+
+```bash
+spark-submit --master 'local[2]' \
+  --conf "spark.hadoop.fs.defaultFS=$HDFS_DEFAULT_FS" \
+  --conf spark.hadoop.dfs.client.use.datanode.hostname=false \
+  src/processing/bronze_ingestion.py
+```
+
+**Historical HDFS bootstrap is currently not one-command automated.** The snapshot and upload utility are present, but a fresh machine must supply and start its own compatible Hadoop environment. The repository's discovery/crawler utilities are not a guaranteed reconstruction of this exact approved snapshot.
+
+## 4. Run Batch ETL
+
+Produce Silver games/reviews and then Gold Base:
+
+```bash
+spark-submit --master 'local[2]' \
+  --conf "spark.hadoop.fs.defaultFS=$HDFS_DEFAULT_FS" \
+  --conf spark.hadoop.dfs.client.use.datanode.hostname=false \
+  src/silver/silver_pipeline.py
+
+spark-submit --master 'local[2]' \
+  --conf "spark.hadoop.fs.defaultFS=$HDFS_DEFAULT_FS" \
+  --conf spark.hadoop.dfs.client.use.datanode.hostname=false \
+  src/gold/run_gold.py
+```
+
+A successful baseline preserves 50 games, 25,000 reviews, 25,000 Gold rows, and 25,000 unique recommendation IDs.
+
+## 5. Run Spark Analytics
+
+```bash
+spark-submit --master 'local[2]' \
+  --conf "spark.hadoop.fs.defaultFS=$HDFS_DEFAULT_FS" \
+  --conf spark.hadoop.dfs.client.use.datanode.hostname=false \
+  src/analytics/run_gold_analytics.py
+```
+
+This reads `/steam/gold/base` and writes nine datasets below `/steam/gold/analytics/`:
+
+`game_metrics`, `genre_metrics`, `playtime_metrics`, `free_paid_metrics`, `engagement_metrics`, `label_profile`, `platform_metrics`, `category_metrics`, and `purchase_metrics`.
+
+## 6. Generate Visualizations
+
+```bash
+spark-submit --master 'local[2]' \
+  --conf "spark.hadoop.fs.defaultFS=$HDFS_DEFAULT_FS" \
+  --conf spark.hadoop.dfs.client.use.datanode.hostname=false \
+  src/visualization/run_gold_visualization.py
+```
+
+The runner reads Gold Analytics, not Gold Base, and writes these files under `evidence/visualization/`:
+
+- `top_games_recommendation.png`
+- `genre_recommendation.png`
+- `playtime_recommendation.png`
+- `free_paid_recommendation.png`
+- `label_distribution.png`
+- `purchase_recommendation.png`
+
+## 7. Run MapReduce Cross-check
+
+```bash
+bash scripts/run_game_recommendation_mapreduce.sh
+```
+
+The script independently recomputes per-game recommendation counts from historical Bronze with Hadoop Streaming, writes `/steam/mapreduce/game_recommendation_metrics`, and compares the result with Spark `game_metrics`.
+
+The validated repository evidence reports 50 app IDs, 25,000 reviews, 18,321 positive, 6,679 negative, zero mismatches, and `CROSS-CHECK: PASS`. MapReduce is a foundational validation branch, not the main analytics engine. Its runner replaces only its own HDFS output path when rerun.
+
+## 8. Load Historical Analytics into MongoDB
+
+```bash
+source scripts/load_project_env.sh .env
+bash scripts/run_mongodb_serving.sh
+```
+
+This runner starts MongoDB if needed, reads all nine HDFS Gold Analytics datasets, and loads database `steam_analytics`. Documents use deterministic natural `_id` values. A reload upserts the current snapshot and removes stale snapshot documents, so rerunning is idempotent.
+
+MongoDB is only the serving copy; `/steam/gold/analytics/*` remains the historical analytical source of truth.
+
+## 9. Run Realtime Review Streaming
+
+The implemented realtime event type is **`REVIEW_CREATED` only**:
 
 ```text
-data/raw/
-data/bronze/
-data/silver/
-data/gold/
-output/
+Steam review API
+  -> Review Producer
+  -> Kafka steam_events
+  -> Spark Structured Streaming
+  -> HDFS Bronze archive / quarantine / incremental Silver / incremental Gold
+  -> MongoDB recent_reviews / realtime_game_metrics
 ```
 
-Git repository chủ yếu chứa:
+Before starting the producer, confirm that `data/raw/registry/game_registry.jsonl` exists and contains eligible `ACTIVE` games. This mutable control-plane file and producer SQLite state are intentionally not committed. A fresh clone therefore needs an approved registry/onboarding step before production polling can begin.
+
+Start Kafka and create its topic as shown in Step 2. Start MongoDB, then run both long-running processes in separate terminals.
+
+**Terminal 1 — continuous producer (do not add `--once`):**
+
+```bash
+bash scripts/run_review_producer.sh
+```
+
+**Terminal 2 — continuous Structured Streaming with MongoDB serving:**
+
+```bash
+MONGO_REALTIME_ENABLED=true \
+STREAM_AVAILABLE_NOW=false \
+bash scripts/run_review_streaming.sh
+```
+
+The producer bootstraps known historical review IDs and publishes only newly observed IDs. On first contact with a game it may seed its state without emitting historical reviews.
+
+The stream validates events, archives Kafka input, quarantines invalid records, applies a seven-day event-time watermark by default, deduplicates `recommendationid`, and anti-joins the canonical historical Silver IDs. Accepted rows are appended to incremental Silver and Gold.
+
+MongoDB realtime semantics:
+
+- `recent_reviews`: one document per new `recommendationid`, with a deterministic `_id`. Historical baseline reviews are excluded.
+- `realtime_game_metrics`: stateful one-hour tumbling event-time windows in update mode, containing `review_count`, `positive_reviews`, `negative_reviews`, and `recommendation_rate`.
+
+See [Continuous vs Bounded Streaming](#continuous-vs-bounded-streaming) before using smoke mode.
+
+## 10. Verify MongoDB Serving Data
+
+### Historical collections
+
+```bash
+docker exec steam-mongodb mongosh --quiet steam_analytics --eval \
+  'db.game_metrics.countDocuments({})'
+
+docker exec steam-mongodb mongosh --quiet steam_analytics --eval \
+  'db.getCollectionNames().sort()'
+```
+
+### Realtime collections
+
+```bash
+docker exec steam-mongodb mongosh --quiet steam_analytics --eval \
+  'db.recent_reviews.countDocuments({})'
+
+docker exec steam-mongodb mongosh --quiet steam_analytics --eval \
+  'db.recent_reviews.find({}).sort({timestamp_created:-1}).limit(20).forEach(printjson)'
+
+docker exec steam-mongodb mongosh --quiet steam_analytics --eval \
+  'db.realtime_game_metrics.countDocuments({})'
+
+docker exec steam-mongodb mongosh --quiet steam_analytics --eval \
+  'db.realtime_game_metrics.find({}).sort({window_start:-1}).limit(20).forEach(printjson)'
+```
+
+Realtime counts are dynamic. They depend on genuinely new reviews and completed/updated windows; do not compare them with a fixed evidence snapshot count.
+
+## Running Tests
+
+Run lightweight pure-Python suites from the repository root:
+
+```bash
+python -m unittest -v tests.test_gold_visualization
+python -m unittest -v tests.test_game_recommendation_mapreduce
+python -m unittest -v tests.test_mongodb_serving
+python -m unittest -v tests.test_streaming_producer
+```
+
+Run Spark-dependent suites through the installed Spark runtime:
+
+```bash
+spark-submit --master 'local[2]' tests/test_gold_analytics.py
+spark-submit --master 'local[2]' tests/test_streaming_spark.py
+spark-submit --master 'local[2]' tests/test_realtime_mongodb_serving.py
+```
+
+The test suites use temporary/local fixtures unless their own setup explicitly starts an external service. They do not replace the HDFS/Kafka/Mongo runtime checks above.
+
+## HDFS Paths
+
+| Data | Path |
+|---|---|
+| Bronze games | `/steam/bronze/games` |
+| Bronze historical reviews | `/steam/bronze/reviews` |
+| Bronze stream archive | `/steam/bronze/stream_events` |
+| Invalid review events | `/steam/quarantine/review_events` |
+| Silver games | `/steam/silver/games` |
+| Silver historical reviews | `/steam/silver/reviews` |
+| Incremental Silver reviews | `/steam/silver/reviews_incremental_v1` |
+| Gold Base | `/steam/gold/base` |
+| Incremental Gold Base | `/steam/gold/base_incremental_v1` |
+| Gold Analytics | `/steam/gold/analytics/<dataset>` |
+| MapReduce output | `/steam/mapreduce/game_recommendation_metrics` |
+| Streaming checkpoints | `/steam/checkpoints/review_*_v1` |
+| MongoDB stream checkpoints | `/steam/checkpoints/mongodb/recent_reviews`, `/steam/checkpoints/mongodb/realtime_game_metrics` |
+
+## MongoDB Collections
+
+### Historical Serving V1
+
+| Collection | Natural key | Purpose | Validated baseline documents |
+|---|---|---|---:|
+| `game_metrics` | `appid` | Review metrics by game | 50 |
+| `genre_metrics` | `genre` | Metrics by genre | 17 |
+| `playtime_metrics` | `playtime_bucket` | Metrics by playtime band | 5 |
+| `free_paid_metrics` | `game_type` | Free versus paid comparison | 2 |
+| `engagement_metrics` | `appid` | Engagement measures by game | 50 |
+| `label_profile` | Fixed snapshot key | Historical label distribution | 1 |
+| `platform_metrics` | `platform` | Metrics by supported platform | 3 |
+| `category_metrics` | `category` | Metrics by Steam category | 59 |
+| `purchase_metrics` | `purchase_source` | Steam purchase-source metrics | 2 |
+
+### Realtime Serving V2
+
+| Collection | Natural key | Purpose |
+|---|---|---|
+| `recent_reviews` | `recommendationid` | Latest incremental review feed |
+| `realtime_game_metrics` | `appid` + window start/end | One-hour event-time metrics by game |
+
+## Continuous vs Bounded Streaming
+
+| Setting | Behaviour | Use |
+|---|---|---|
+| `STREAM_AVAILABLE_NOW=false` | Keeps waiting for future Kafka data | Continuous local realtime mode |
+| `STREAM_AVAILABLE_NOW=true` | Processes currently available data and exits | Bounded smoke/catch-up validation |
+
+An exited `availableNow` job is behaving as configured; it is not a continuous service. A small producer smoke run can use `bash scripts/run_review_producer.sh --once --max-games 2`, but production-style continuous polling must omit `--once`.
+
+## Common Validation Checks
+
+### Historical
+
+- Games = 50.
+- Reviews = 25,000.
+- Positive = 18,321; negative = 6,679.
+- Gold unique `recommendationid` = 25,000.
+- MapReduce/Spark cross-check = PASS with zero mismatches.
+
+### MongoDB historical
+
+- Collection counts match the Historical Serving V1 table.
+- Aggregate review totals still reconcile to 25,000.
+- Re-running the loader does not create duplicate natural keys.
+
+### Realtime
+
+- `recent_reviews` contains only incremental recommendation IDs.
+- Historical overlap is zero.
+- Duplicate recommendation IDs are zero.
+- Every `recommendation_rate` is in `[0, 1]`.
+- Counts are dynamic; zero can be valid when Steam has no new reviews during the poll.
+
+Evidence from the validated runs is stored under `evidence/`; it is a reproducibility reference, not a substitute for verifying a new environment.
+
+## Troubleshooting
+
+| Symptom | Check |
+|---|---|
+| `.env` values fail parsing or connections | Replace every `CHANGE_ME`; keep fixture overrides unset |
+| NameNode is unavailable | Start the external Hadoop environment and verify `HADOOP_NAMENODE_CONTAINER` |
+| Spark cannot resolve HDFS | Set `HDFS_DEFAULT_FS` to an endpoint reachable from the process running Spark; do not reuse another machine's address |
+| HDFS write is denied | Verify `HADOOP_USER_NAME`, target ownership, and permissions before changing data |
+| Kafka topic is missing | Run `bash scripts/create_streaming_topic.sh` after Kafka is healthy |
+| Kafka connector cannot resolve | Check internet access and that the connector coordinate matches the installed Spark/Scala build |
+| MongoDB is unavailable | Check `docker compose -f compose.mongodb.yaml ps` and the `steam-mongodb` health status |
+| Historical serving says PyMongo is missing | Install `requirements.txt` into the Python selected by `PYTHON_BIN` |
+| Spark UI port 4040 is occupied | Spark may select another port; optionally add `--conf spark.ui.port=4041` to direct Spark commands |
+| Streaming exits after catching up | Set `STREAM_AVAILABLE_NOW=false` for continuous mode |
+| Producer cannot start | Provide the uncommitted ACTIVE registry and verify Steam/network access |
+| No new documents appear | First bootstrap can emit zero; Steam may have no reviews newer than producer state |
+
+## Current Limitations
+
+- New-review creation is the only realtime event currently implemented.
+- Realtime price, player-count, and game-metadata update events are not implemented.
+- A fresh clone lacks both a bundled Hadoop deployment and the mutable ACTIVE producer registry.
+- The Backend API and frontend dashboard are not implemented.
+- MLlib modelling remains future work.
+- Local continuous jobs stop when the host or their containers stop.
+- This is a reproducible local/course platform, not production deployment infrastructure.
+
+## Next Development Step: Backend API
+
+The data platform's current application boundary is MongoDB. A request-serving application should not query HDFS or launch Spark for each frontend request:
 
 ```text
-source code
-configuration
-documentation
-small evidence
-schemas
-analytical queries
-model metrics
-reproduction instructions
+Frontend
+   |
+   v
+Backend API
+   |
+   v
+MongoDB: steam_analytics
 ```
 
-Secrets và credentials không được commit.
+Start with read-only endpoints, pagination, input validation, stable response DTOs, and clear freshness metadata. The backend framework is intentionally not selected in this repository.
 
----
+## Suggested Backend API Contract
 
-# 32. Evidence Strategy
+| Endpoint | MongoDB source | Intended response |
+|---|---|---|
+| `GET /api/health` | MongoDB ping | Service/database health |
+| `GET /api/analytics/games` | `game_metrics` | Paginated game metrics |
+| `GET /api/analytics/games/top` | `game_metrics` | Ranked games by a validated metric |
+| `GET /api/analytics/genres` | `genre_metrics` | Genre aggregates |
+| `GET /api/analytics/playtime` | `playtime_metrics` | Playtime-band aggregates |
+| `GET /api/analytics/free-paid` | `free_paid_metrics` | Free/paid comparison |
+| `GET /api/analytics/platforms` | `platform_metrics` | Platform aggregates |
+| `GET /api/analytics/categories` | `category_metrics` | Category aggregates |
+| `GET /api/analytics/purchase` | `purchase_metrics` | Purchase-source aggregates |
+| `GET /api/realtime/reviews` | `recent_reviews` | Latest incremental reviews |
+| `GET /api/realtime/reviews?appid=<appid>` | `recent_reviews` | Latest reviews for one game |
+| `GET /api/realtime/games` | `realtime_game_metrics` | Latest per-game windows |
+| `GET /api/realtime/games/<appid>` | `realtime_game_metrics` | Windows for one game |
 
-Evidence dự kiến gồm:
+Frontend development should follow the API. Suggested dashboard views include top games by recommendation rate, genre recommendation, playtime versus recommendation, free versus paid comparison, positive/negative distribution, a recent-review feed, and one-hour realtime recommendation metrics.
 
-```text
-HDFS paths
-raw record counts
-schema evidence
-data-quality counts
-Bronze vs Silver reconciliation
-MapReduce output
-MapReduce vs Spark validation
-Spark SQL analytical results
-formatted query plans
-ML metrics
-confusion matrix
-MongoDB write/read-back
-streaming progress
-checkpoint evidence
-performance experiment
-software versions
-exact reproduction commands
-```
+## Development Principles
 
----
+- Keep Bronze immutable and replayable.
+- Treat HDFS Gold as analytical truth and MongoDB as a rebuildable serving view.
+- Preserve one deterministic natural key for every MongoDB document.
+- Keep historical and realtime paths explicit; do not mix their counts.
+- Make streaming jobs restartable through durable checkpoints and idempotent sinks.
+- Validate aggregates with an independent path where practical.
+- Keep secrets, private endpoints, mutable registries, and runtime state out of Git.
+- Document only commands and features that the repository actually supports.
 
-# 33. Implemented vs Proposed
+## Project Status Summary
 
-## Implemented
+The repository has a validated historical path from committed JSONL through HDFS Bronze, PySpark Silver/Gold, nine analytics datasets, visualizations, MapReduce cross-validation, and MongoDB Historical Serving V1. It also has an incremental path from Steam review polling through Kafka and Structured Streaming to HDFS incremental layers and MongoDB Realtime Serving V2.
 
-Current completed components:
-
-```text
-Steam discovery
-catalog qualification
-local registry reconciliation and onboarding planning
-game selection
-Steam ingestion
-raw validation
-Bronze-ready validation
-HDFS Bronze
-project refactor
-```
-
-## Next / Planned
-
-```text
-PySpark Bronze -> Silver
-Silver -> Gold
-MapReduce
-Spark SQL / EDA
-production Game Registry / Watchlist automation
-ACTIVE-game incremental API polling / event producer
-Kafka / Structured Streaming
-Spark MLlib
-MongoDB
-performance experiments
-cluster deployment
-final integration
-```
-
-Project documentation phải phân biệt rõ:
-
-```text
-Implemented
-Measured
-Validated
-```
-
-với:
-
-```text
-Planned
-Proposed
-Design-only
-```
-
----
-
-# 34. Immediate Next Step
-
-Current checkpoint:
-
-```text
-HDFS Bronze
-     |
-     v
-PySpark Bronze -> Silver
-     |
-     v
-Silver Parquet
-```
-
-Primary development area:
-
-```text
-src/batch/
-```
-
-Silver pipeline cần hoàn thành:
-
-```text
-explicit schema
-parsing
-data-quality profiling
-type casting
-timestamp conversion
-null handling
-deduplication
-key validation
-normalization
-row-count reconciliation
-Parquet output
-```
-
-Sau đó:
-
-```text
-             Silver
-               |
-       +-------+-------+
-       |               |
-       v               v
-Gold Analytics     Gold ML-ready
-       |               |
-       v               v
-EDA / Spark SQL    Spark MLlib
-```
-
----
-
-# 35. Project Roadmap
-
-```text
-Phase 1
-Steam Ingestion + HDFS Bronze
-DONE
-
-Phase 2
-PySpark Bronze -> Silver
-NEXT
-
-Phase 3
-Silver -> Gold
-
-Phase 4
-MapReduce + Validation
-
-Phase 5
-EDA + Spark SQL
-
-Phase 6
-Kafka + Structured Streaming
-
-Phase 7
-Spark MLlib
-
-Phase 8
-MongoDB Serving
-
-Phase 9
-Performance + Scalability
-
-Phase 10
-Deployment Design
-
-Phase 11
-Integration + Report + Demo
-```
+To reproduce the system on a new machine, supply a compatible Hadoop environment and, for live polling, an approved ACTIVE game registry. The next product-development slice is a read-only Backend API over MongoDB, followed by the frontend dashboard.

@@ -1,0 +1,5 @@
+Found 2 items
+-rw-r--r--   1 hadoop supergroup          0 2026-09-30 03:33 /steam/mapreduce/game_recommendation_metrics/_SUCCESS
+-rw-r--r--   1 hadoop supergroup      1.7 K 2026-09-30 03:33 /steam/mapreduce/game_recommendation_metrics/part-00000
+   DIR_COUNT   FILE_COUNT       CONTENT_SIZE PATHNAME
+           1            2               1700 /steam/mapreduce/game_recommendation_metrics

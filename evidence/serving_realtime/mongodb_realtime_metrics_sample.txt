@@ -1,0 +1,17 @@
+SAMPLE QUERIES
+
+Latest realtime metric windows:
+db.realtime_game_metrics.find({}).sort({window_start:-1}).limit(20)
+
+Latest realtime metric windows for appid 570:
+db.realtime_game_metrics.find({appid:570}).sort({window_start:-1}).limit(20)
+
+REPRESENTATIVE RESULTS
+
+{"_id":"570:2026-09-30T12:00:00Z:2026-09-30T13:00:00Z","appid":570,"window_start":"2026-09-30T12:00:00Z","window_end":"2026-09-30T13:00:00Z","review_count":3,"positive_reviews":3,"negative_reviews":0,"recommendation_rate":1.0}
+{"_id":"570:2026-09-30T11:00:00Z:2026-09-30T12:00:00Z","appid":570,"window_start":"2026-09-30T11:00:00Z","window_end":"2026-09-30T12:00:00Z","review_count":4,"positive_reviews":1,"negative_reviews":3,"recommendation_rate":0.25}
+{"_id":"570:2026-09-30T10:00:00Z:2026-09-30T11:00:00Z","appid":570,"window_start":"2026-09-30T10:00:00Z","window_end":"2026-09-30T11:00:00Z","review_count":5,"positive_reviews":3,"negative_reviews":2,"recommendation_rate":0.6}
+
+result_count=30
+window=1 hour tumbling event-time
+output_mode=update

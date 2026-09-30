@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+source "$PROJECT_ROOT/scripts/load_project_env.sh" "$PROJECT_ROOT/.env"
+
 CONTAINER="${KAFKA_CONTAINER:-steam-kafka}"
 TOPIC="${KAFKA_TOPIC:-steam_events}"
 PARTITIONS="${KAFKA_TOPIC_PARTITIONS:-3}"
