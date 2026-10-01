@@ -294,6 +294,35 @@ spark-submit --master 'local[2]' \
 
 A successful baseline preserves 50 games, 25,000 reviews, 25,000 Gold rows, and 25,000 unique recommendation IDs.
 
+### Dynamic onboarding as one resumable workflow
+
+After discovery has placed qualified games in the onboarding queue, run the
+entire guarded flow with one command:
+
+```bash
+bash scripts/run_onboarding_workflow.sh \
+  --batch-id onboarding-YYYYMMDD-NNN
+```
+
+For a new periodic cycle, let the runner refresh the discovery plan first and
+generate the batch ID automatically:
+
+```bash
+bash scripts/run_onboarding_workflow.sh --run-discovery
+```
+
+The runner performs prepare, historical review crawl, validation, immutable
+incremental Bronze publication, Bronze verification, Silver, Gold, Analytics,
+MongoDB serving, per-game readiness checks, and finally the `QUEUED` to
+`ACTIVE` registry transition. Every phase is recorded under
+`data/onboarding/<batch-id>/workflow_state.json`. Re-running the same batch ID
+resumes completed work instead of repeating it. Registry activation occurs
+only after Bronze, Silver, Gold, and MongoDB all contain the expected data.
+
+This workflow state is also the integration contract for a future API or UI:
+the UI starts a batch through a worker and reads the same state file rather
+than directly editing registry or HDFS data.
+
 ## 5. Run Spark Analytics
 
 ```bash

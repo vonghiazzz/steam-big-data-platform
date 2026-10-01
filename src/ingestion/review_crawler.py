@@ -7,12 +7,12 @@ from pathlib import Path
 
 import requests
 
-from steam.common.config import (
+from src.common.config import (
     LANDING_ROOT,
     SELECTED_GAMES_PATH,
 )
-from steam.common.jsonl import read_jsonl
-from steam.discovery.policy import (
+from src.common.jsonl import read_jsonl
+from src.discovery.policy import (
     DEFAULT_POLICY_PATH,
     RetryPolicy,
     load_discovery_policy,

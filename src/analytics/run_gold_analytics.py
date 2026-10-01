@@ -67,33 +67,27 @@ def validate_gold(gold_df):
     print(f"voted_up=true count={positive_count}")
     print(f"voted_up=false count={negative_count}")
 
-    if row_count != 25000:
+    if row_count <= 0:
+        raise RuntimeError("Gold Base is empty")
+
+    if unique_reviews != row_count:
         raise RuntimeError(
-            f"Expected 25000 Gold rows, found {row_count}"
+            "Gold recommendationid values are not unique: "
+            f"rows={row_count}, unique={unique_reviews}"
         )
 
-    if unique_reviews != 25000:
-        raise RuntimeError(
-            f"Expected 25000 unique recommendationid, "
-            f"found {unique_reviews}"
-        )
+    if distinct_games <= 0:
+        raise RuntimeError("Gold Base contains no game appids")
 
-    if distinct_games != 50:
-        raise RuntimeError(
-            f"Expected 50 distinct appids, found {distinct_games}"
-        )
+    if positive_count + negative_count != row_count:
+        raise RuntimeError("Gold Base contains null or invalid voted_up values")
 
-    if positive_count != 18321:
-        raise RuntimeError(
-            f"Expected 18321 positive reviews, "
-            f"found {positive_count}"
-        )
-
-    if negative_count != 6679:
-        raise RuntimeError(
-            f"Expected 6679 negative reviews, "
-            f"found {negative_count}"
-        )
+    return {
+        "rows": row_count,
+        "games": distinct_games,
+        "positive": positive_count,
+        "negative": negative_count,
+    }
 
 
 def write_analytics(
@@ -132,7 +126,14 @@ def write_analytics(
             .parquet(path)
         )
 
-def validate_written_analytics(spark: SparkSession):
+def validate_written_analytics(
+    spark: SparkSession,
+    *,
+    expected_rows: int,
+    expected_games: int,
+    expected_positive: int,
+    expected_negative: int,
+):
     print("\n=== READ-BACK VALIDATION ===")
 
     game_df = spark.read.parquet(GAME_METRICS_PATH)
@@ -250,22 +251,22 @@ def validate_written_analytics(spark: SparkSession):
         f"negative={profile_row['negative_count']}"
     )
 
-    if game_count != 50:
+    if game_count != expected_games:
         raise RuntimeError(
-            f"Expected 50 game metric rows, found {game_count}"
+            f"Expected {expected_games} game metric rows, found {game_count}"
         )
 
-    if engagement_count != 50:
+    if engagement_count != expected_games:
         raise RuntimeError(
-            f"Expected 50 engagement rows, found {engagement_count}"
+            f"Expected {expected_games} engagement rows, found {engagement_count}"
         )
 
-    if playtime_total != 25000:
+    if playtime_total != expected_rows:
         raise RuntimeError(
             f"Playtime metrics do not reconcile: {playtime_total}"
         )
 
-    if free_paid_total != 25000:
+    if free_paid_total != expected_rows:
         raise RuntimeError(
             f"Free/Paid metrics do not reconcile: {free_paid_total}"
         )
@@ -276,13 +277,13 @@ def validate_written_analytics(spark: SparkSession):
     if invalid_genre_rates != 0:
         raise RuntimeError("Invalid recommendation rate in genre metrics")
 
-    if profile_row["total_rows"] != 25000:
+    if profile_row["total_rows"] != expected_rows:
         raise RuntimeError("Label profile total mismatch")
 
-    if profile_row["positive_count"] != 18321:
+    if profile_row["positive_count"] != expected_positive:
         raise RuntimeError("Positive label count mismatch")
 
-    if profile_row["negative_count"] != 6679:
+    if profile_row["negative_count"] != expected_negative:
         raise RuntimeError("Negative label count mismatch")
 
     if platform_count == 0:
@@ -294,7 +295,7 @@ def validate_written_analytics(spark: SparkSession):
     if purchase_count == 0:
         raise RuntimeError("Purchase metrics are empty")
 
-    if purchase_total != 25000:
+    if purchase_total != expected_rows:
         raise RuntimeError(
             f"Purchase metrics do not reconcile: {purchase_total}"
         )
@@ -324,7 +325,7 @@ def main():
 
         gold_df.printSchema()
 
-        validate_gold(gold_df)
+        expected = validate_gold(gold_df)
 
         print("\n=== DATA QUALITY CHECK ===")
 
@@ -459,7 +460,13 @@ def main():
             purchase_metrics,
         )
 
-        validate_written_analytics(spark)
+        validate_written_analytics(
+            spark,
+            expected_rows=expected["rows"],
+            expected_games=expected["games"],
+            expected_positive=expected["positive"],
+            expected_negative=expected["negative"],
+        )
 
     finally:
         spark.stop()

@@ -276,14 +276,24 @@ def _validate_numeric_document(collection_name: str, document: Mapping) -> None:
             )
 
 
-def validate_database(database) -> tuple[dict[str, int], dict[str, int]]:
+def validate_database(
+    database,
+    *,
+    expected_counts: Mapping[str, int] | None = None,
+    expected_profile: Mapping[str, int] | None = None,
+) -> tuple[dict[str, int], dict[str, int]]:
     counts: dict[str, int] = {}
     for name, spec in COLLECTION_SPECS.items():
         documents = list(database[name].find({}))
         counts[name] = len(documents)
-        if counts[name] != spec.expected_count:
+        expected_count = (
+            expected_counts[name]
+            if expected_counts is not None
+            else spec.expected_count
+        )
+        if counts[name] != expected_count:
             raise RuntimeError(
-                f"MongoDB {name} count {counts[name]} != {spec.expected_count}"
+                f"MongoDB {name} count {counts[name]} != {expected_count}"
             )
         identities = [document["_id"] for document in documents]
         if len(set(identities)) != len(identities):
@@ -296,12 +306,12 @@ def validate_database(database) -> tuple[dict[str, int], dict[str, int]]:
     profile = database["label_profile"].find_one(
         {"_id": "historical_baseline"}
     )
-    expected_profile = {
+    profile_expectation = expected_profile or {
         "total_rows": 25_000,
         "positive_count": 18_321,
         "negative_count": 6_679,
     }
-    for field, expected in expected_profile.items():
+    for field, expected in profile_expectation.items():
         if profile.get(field) != expected:
             raise RuntimeError(
                 f"MongoDB label_profile {field}={profile.get(field)} != {expected}"
@@ -328,9 +338,12 @@ def validate_database(database) -> tuple[dict[str, int], dict[str, int]]:
             )
         ),
     }
+    expected_total = profile_expectation["total_rows"]
     for field in ("game_reviews", "free_paid_reviews", "purchase_reviews"):
-        if totals[field] != 25_000:
-            raise RuntimeError(f"MongoDB {field}={totals[field]} != 25000")
+        if totals[field] != expected_total:
+            raise RuntimeError(
+                f"MongoDB {field}={totals[field]} != {expected_total}"
+            )
     return counts, totals
 
 

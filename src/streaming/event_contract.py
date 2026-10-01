@@ -7,6 +7,8 @@ from typing import Any, Mapping
 
 
 REVIEW_CREATED = "REVIEW_CREATED"
+PLAYER_COUNT_SNAPSHOT = "PLAYER_COUNT_SNAPSHOT"
+PLAYER_COUNT_SCHEMA_VERSION = 1
 
 
 def utc_iso_from_epoch(value: Any) -> str:
@@ -41,3 +43,48 @@ def build_review_created_event(
         "produced_at": produced_at,
         "payload": dict(review),
     }
+
+
+def build_player_count_snapshot_event(
+    appid: int,
+    player_count: int,
+    *,
+    observed_at: str,
+    produced_at: str,
+) -> dict[str, Any]:
+    """Build a deterministic player-count observation event."""
+    if isinstance(appid, bool) or not isinstance(appid, int) or appid <= 0:
+        raise ValueError("appid must be a positive integer")
+    if (
+        isinstance(player_count, bool)
+        or not isinstance(player_count, int)
+        or player_count < 0
+    ):
+        raise ValueError("player_count must be a non-negative integer")
+
+    observed = _normalized_utc_iso(observed_at, "observed_at")
+    produced = _normalized_utc_iso(produced_at, "produced_at")
+    return {
+        "event_id": f"{PLAYER_COUNT_SNAPSHOT}:{appid}:{observed}",
+        "event_type": PLAYER_COUNT_SNAPSHOT,
+        "schema_version": PLAYER_COUNT_SCHEMA_VERSION,
+        "appid": appid,
+        "event_time": observed,
+        "produced_at": produced,
+        "payload": {
+            "player_count": player_count,
+        },
+    }
+
+
+def _normalized_utc_iso(value: Any, field: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError(f"{field} is required")
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{field} must be ISO-8601") from exc
+    if parsed.tzinfo is None:
+        raise ValueError(f"{field} must include a timezone")
+    return parsed.astimezone(timezone.utc).isoformat()
