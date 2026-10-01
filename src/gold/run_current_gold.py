@@ -1,4 +1,7 @@
+import json
 import os
+from datetime import datetime, timezone
+from pathlib import Path
 
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
@@ -19,6 +22,35 @@ CURRENT_GOLD_PATH = os.getenv(
     "CURRENT_GOLD_OUTPUT_PATH",
     "/steam/gold/base_current_v1",
 )
+
+CURRENT_GOLD_PROFILE_PATH = os.getenv(
+    "CURRENT_GOLD_PROFILE_PATH"
+)
+
+
+def write_profile(payload):
+    if not CURRENT_GOLD_PROFILE_PATH:
+        return
+
+    path = Path(CURRENT_GOLD_PROFILE_PATH)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    temporary = (
+        path.parent
+        / f".{path.name}.{os.getpid()}.tmp"
+    )
+
+    temporary.write_text(
+        json.dumps(
+            payload,
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    os.replace(temporary, path)
 
 
 def schema_map(df):
@@ -233,6 +265,25 @@ def main():
             CURRENT_GOLD_PATH
         )
 
+        profile = {
+            "schema_version": 1,
+            "generated_at": datetime.now(
+                timezone.utc
+            ).isoformat(),
+            "historical_path": HISTORICAL_GOLD_PATH,
+            "realtime_path": REALTIME_GOLD_PATH,
+            "current_path": CURRENT_GOLD_PATH,
+            "historical_rows": hist_rows,
+            "realtime_rows": rt_rows,
+            "overlap_ids": overlap_count,
+            "rows": current_rows,
+            "unique_recommendationids": (
+                current_unique_ids
+            ),
+        }
+
+        write_profile(profile)
+
         print()
         print("=== WRITE COMPLETE ===")
         print(f"path={CURRENT_GOLD_PATH}")
@@ -241,6 +292,12 @@ def main():
             f"unique_recommendationids="
             f"{current_unique_ids}"
         )
+
+        if CURRENT_GOLD_PROFILE_PATH:
+            print(
+                "profile_path="
+                f"{CURRENT_GOLD_PROFILE_PATH}"
+            )
 
     finally:
         spark.stop()
