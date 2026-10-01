@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Steam Analytics Dashboard (Frontend V1)
 
-## Getting Started
+Next.js (App Router) + TypeScript + Tailwind dashboard for the Steam Big Data Platform.
 
-First, run the development server:
+The frontend only calls the Backend API (`docs/API_CONTRACT_V1.md`). It never connects to
+MongoDB, HDFS, Kafka or Spark.
+
+## Run
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd frontend
+npm install
+cp .env.example .env.local   # then edit if needed
+npm run dev                  # http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Production check:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run lint && npx tsc --noEmit
+npm run build && npm run start
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Environment variables
 
-## Learn More
+| Variable | Meaning |
+| --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | Backend API base URL, e.g. `http://localhost:8080`. No trailing path. |
+| `NEXT_PUBLIC_USE_MOCK` | `true` = built-in mock data (default), `false` = call the real Backend API. |
 
-To learn more about Next.js, take a look at the following resources:
+`NEXT_PUBLIC_*` values are read at startup/build time: restart `npm run dev` after editing `.env.local`.
+The Backend must allow CORS for the frontend origin (e.g. `http://localhost:3000`).
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Switch from mock to the real API
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Start the Backend API.
+2. In `.env.local` set `NEXT_PUBLIC_API_BASE_URL=http://localhost:<backend-port>` and `NEXT_PUBLIC_USE_MOCK=false`.
+3. Restart `npm run dev`.
 
-## Deploy on Vercel
+## Pages
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+| Route | Content |
+| --- | --- |
+| `/` | Overview: totals, positive/negative bar, top 5 games |
+| `/games` | Top Games (Top 10/20/50) |
+| `/analytics` | Genre, Playtime, Free vs Paid, Platform, Category, Purchase Source |
+| `/realtime` | Recent Reviews, Realtime Game Metrics, per-game trend (polling every 15s) |
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Structure
+
+```
+src/
+  app/            routes (layout + 4 pages)
+  components/     shared UI (tables, charts, StateView, NavBar, ...)
+  hooks/          SWR hooks (historical: no polling, realtime: polling) + game-name lookup
+  lib/            config, formatters, api/http.ts (client + ApiError), api/endpoints.ts
+  mocks/          mock data + handlers returning the exact contract shapes
+  types/api.ts    TypeScript types of the API contract
+```
+
+## Contract notes handled by the UI
+
+- Envelope `{ data, meta }`, errors `{ error: { code, message } }`.
+- `recommendation_rate` is 0..1 (shown as %). Timestamps are UTC ISO-8601, shown in `Asia/Ho_Chi_Minh`.
+- `recommendationid` is a string. Nullable review fields render as `—`.
+- `UNKNOWN` (genre) and `MISSING` (playtime bucket) are valid values, not errors.
+- Platform and Category are multi-membership: totals are never summed or validated against 25,000.
+- Realtime responses carry only `appid`; names come from `/api/analytics/games/top?limit=50`.
+- An empty realtime list is a valid state (no new reviews since the snapshot).
+
+## Assumptions to confirm with the Backend owner
+
+- `playtime_at_review` / `playtime_forever` are in minutes (see `formatPlaytimeMinutes` in `src/lib/format.ts`).
