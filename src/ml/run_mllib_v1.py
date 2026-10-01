@@ -113,11 +113,25 @@ def main() -> None:
     started = time.monotonic()
     run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     input_path = os.getenv("ML_INPUT_PATH", DEFAULT_INPUT_PATH)
-    model_root = os.getenv("ML_MODEL_ROOT", DEFAULT_MODEL_ROOT).rstrip("/")
-    predictions_path = os.getenv(
-        "ML_PREDICTIONS_PATH", DEFAULT_PREDICTIONS_PATH
+    model_root_base = os.getenv(
+        "ML_MODEL_ROOT",
+        DEFAULT_MODEL_ROOT,
+    ).rstrip("/")
+    model_root = f"{model_root_base}/{run_id}"
+
+    predictions_root = os.getenv(
+        "ML_PREDICTIONS_PATH",
+        DEFAULT_PREDICTIONS_PATH,
+    ).rstrip("/")
+    predictions_path = f"{predictions_root}/{run_id}"
+
+    evidence_root = Path(
+        os.getenv(
+            "ML_EVIDENCE_DIR",
+            str(DEFAULT_EVIDENCE_DIR),
+        )
     )
-    evidence_dir = Path(os.getenv("ML_EVIDENCE_DIR", str(DEFAULT_EVIDENCE_DIR)))
+    evidence_dir = evidence_root / "runs" / run_id
     evidence_dir.mkdir(parents=True, exist_ok=True)
     builder = (
         SparkSession.builder.appName("Steam Spark MLlib V1")
@@ -314,6 +328,7 @@ def main() -> None:
             f"logistic_regression_model_path={model_root}/logistic_regression\n"
             f"random_forest_model_path={model_root}/random_forest\n"
             f"predictions_path={predictions_path}\n"
+            f"evidence_dir={os.path.relpath(evidence_dir, PROJECT_ROOT)}\n"
             f"runtime_seconds={time.monotonic() - started:.3f}\n"
             + "\n".join(parameter_lines),
         )

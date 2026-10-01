@@ -1,0 +1,4 @@
+run_id=20261001T165508Z
+majority_baseline: TP=7649 FP=1992 TN=0 FN=0
+logistic_regression: TP=4924 FP=559 TN=1433 FN=2725
+random_forest: TP=5191 FP=563 TN=1429 FN=2458

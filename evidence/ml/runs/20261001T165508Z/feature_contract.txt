@@ -1,0 +1,39 @@
+primary_scalar_features:
+  log1p_playtime_at_review_imputed
+  steam_purchase_numeric_imputed
+  received_for_free_numeric_imputed
+  is_free_numeric_imputed
+  log1p_price_imputed
+  platform_windows_numeric_imputed
+  platform_mac_numeric_imputed
+  platform_linux_numeric_imputed
+  log1p_playtime_at_review_missing
+  steam_purchase_numeric_missing
+  received_for_free_numeric_missing
+  is_free_numeric_missing
+  log1p_price_missing
+  platform_windows_numeric_missing
+  platform_mac_numeric_missing
+  platform_linux_numeric_missing
+vector_features:
+  genres (CountVectorizer binary=true)
+  categories (CountVectorizer binary=true)
+excluded_features:
+  appid
+  game_name
+  label
+  negative_reviews
+  overall_positive_rate
+  playtime_forever
+  positive_reviews
+  recommendation_label
+  recommendation_rate
+  recommendationid
+  voted_up
+  votes_funny
+  votes_up
+  weighted_vote_score
+notes:
+  playtime_forever excluded because it may be observed after review creation
+  price is crawl-time metadata, not guaranteed historical review-time price
+  nullable numeric and boolean-derived values use median imputation fitted on training data only
