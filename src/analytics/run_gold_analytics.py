@@ -1,3 +1,5 @@
+import os
+
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 
@@ -14,9 +16,15 @@ from analytics.gold_analytics import (
 )
 
 
-GOLD_BASE_PATH = "/steam/gold/base"
+GOLD_BASE_PATH = os.getenv(
+    "GOLD_ANALYTICS_INPUT_PATH",
+    "/steam/gold/base",
+)
 
-ANALYTICS_ROOT = "/steam/gold/analytics"
+ANALYTICS_ROOT = os.getenv(
+    "GOLD_ANALYTICS_ROOT",
+    "/steam/gold/analytics",
+)
 
 GAME_METRICS_PATH = f"{ANALYTICS_ROOT}/game_metrics"
 GENRE_METRICS_PATH = f"{ANALYTICS_ROOT}/genre_metrics"
