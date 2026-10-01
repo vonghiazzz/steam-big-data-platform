@@ -73,11 +73,13 @@ overwrite một object Bronze khác nội dung.
 
 ## Ranh giới current và future
 
-Hiện realtime chỉ hỗ trợ event `REVIEW_CREATED`. Price update, metadata update,
-vote update và player-count event chưa được triển khai.
+Review realtime hỗ trợ `REVIEW_CREATED`; Player Count V1 hỗ trợ
+`PLAYER_COUNT_SNAPSHOT` trên topic/checkpoint riêng. Price update, metadata
+update và vote update chưa được triển khai.
 
-Discovery frequency được cấu hình `WEEKLY`, nhưng repository chưa có scheduler.
-Producer cũng chỉ đọc danh sách `ACTIVE` khi khởi động; sau một onboarding batch
-cần restart producer để đưa game mới vào polling scope. Backend API/UI sau này
+Discovery frequency `WEEKLY` được thực thi bởi lightweight scheduler có
+rotating catalog cursor, ACTIVE-capacity guard, lock và resumable batch ID.
+Review Producer và Player Count Producer reload danh sách `ACTIVE` mỗi cycle,
+nên game mới tự vào polling scope mà không cần restart. Backend API/UI sau này
 nên trigger workflow và đọc `workflow_state.json`, không sửa registry/HDFS trực
 tiếp.

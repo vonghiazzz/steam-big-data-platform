@@ -151,17 +151,16 @@ Workflow chỉ chuyển game sang `ACTIVE` sau khi historical Bronze, Silver, Go
 và MongoDB readiness đều PASS. Producer bootstrap 500 historical review IDs từ
 HDFS, do đó không phát lại backfill vào Kafka.
 
-Giới hạn hiện tại: review producer nạp ACTIVE scope một lần khi khởi động. Nếu
-workflow vừa activate game mới, phải restart review producer. Player-count
-producer reload registry ở đầu mỗi cycle nên tự nhận game ACTIVE mới mà không
-cần restart. Hai Spark Streaming consumer không cần restart.
+Review producer và player-count producer reload ACTIVE scope ở đầu mỗi cycle.
+Game vừa được activate sẽ được bootstrap state và tự tham gia polling mà không
+cần restart. Hai Spark Streaming consumer cũng không cần restart.
 
 ## Scheduling
 
-`config/discovery_policy.json` ghi discovery frequency là `WEEKLY`, nhưng chưa
-có scheduler/service thực thi lịch này. Hai streaming producer tự loop khi
-process đang chạy; phần còn thiếu là process supervisor/auto-start. Review
-producer vẫn chưa hot-reload registry.
+`config/discovery_policy.json` ghi discovery frequency là `WEEKLY` và
+`scripts/run_discovery_scheduler.sh` thực thi lịch bằng state theo UTC ISO week.
+Scheduler và hai streaming producer chỉ tự loop khi process đang chạy; phần còn
+thiếu là process supervisor/OS auto-start.
 
 ## Có nên bổ sung price, metadata, vote và player count cùng lúc?
 

@@ -28,22 +28,22 @@ Steam API
 | Kafka player-count producer | Đã triển khai |
 | Spark Structured Streaming | Đã triển khai cho review và player count |
 | MongoDB historical/realtime | Đã triển khai |
-| MLlib | Chưa hoàn tất |
+| MLlib | Đã triển khai V1, batch retraining trên Gold Base động |
 | Backend API / dashboard | Chưa triển khai trong repository này |
-| Weekly scheduler | Chưa triển khai |
-| Producer hot-reload registry | Player count: có; review: chưa, cần restart sau onboarding |
+| Weekly scheduler | Đã triển khai, cần process chạy liên tục hoặc `--run-once` |
+| Producer hot-reload registry | Review và player count đều reload mỗi cycle |
 
 ## Snapshot hiện tại
 
-- Registry: `80 ACTIVE`, `87 NEW`, `0 QUEUED`.
-- Historical Bronze/Silver/Gold: `80 games`, `40.000 reviews`.
-- Unique `recommendationid`: `40.000`.
-- Positive: `31.398`.
-- Negative: `8.602`.
-- MongoDB `game_metrics`: `80` documents.
+- Registry: `90 ACTIVE`, `82 NEW`, `0 QUEUED`.
+- Historical Bronze/Silver/Gold: `90 games`, `45.000 reviews`.
+- Unique `recommendationid`: `45.000`.
+- Positive: `35.863`.
+- Negative: `9.137`.
+- MongoDB `game_metrics`: `90` documents.
 
 Baseline nghiên cứu ban đầu vẫn là snapshot cố định `50 games / 25.000
-reviews`. Ba mươi game mới đến từ các Dynamic Onboarding batch. Khi viết báo
+reviews`. Bốn mươi game mới đến từ các Dynamic Onboarding batch. Khi viết báo
 cáo phải nói rõ đang dùng baseline v1 hay snapshot động hiện tại.
 
 ## Tài liệu trong thư mục này

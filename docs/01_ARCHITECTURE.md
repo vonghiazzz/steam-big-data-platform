@@ -64,7 +64,7 @@ The Game Registry / Watchlist is the scalable control plane. A local JSONL regis
 - **ACTIVE game:** poll incrementally, compare source state with known state, and create events for changes. Do not repeat a full historical crawl every discovery cycle.
 - **PAUSED / RETIRED game:** optional operational states that stop normal polling while preserving history and registry lineage.
 
-Local Discovery Control Plane V1 is **Implemented**. A production registry database/service, scheduler, and concurrent workers remain **Design-only**. The fixed 50-game cohort is **Implemented** and unchanged.
+Local Discovery Control Plane V1, rotating catalog cursor, ACTIVE-capacity guard, and lightweight WEEKLY scheduler are **Implemented**. A production registry database/service and external process supervision remain **Design-only**. The fixed 50-game cohort remains the immutable initial research snapshot rather than the current dynamic limit.
 
 ## Processing paths
 

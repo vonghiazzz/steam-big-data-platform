@@ -26,7 +26,39 @@ dscacheutil -q host -a name store.steampowered.com
 curl -I 'https://store.steampowered.com/appreviews/440?json=1'
 ```
 
-## 2. Dynamic onboarding — một command
+## 2. Scheduled discovery/onboarding
+
+Kiểm tra kế hoạch an toàn, không gọi Steam và không thay đổi registry:
+
+```bash
+bash scripts/run_discovery_scheduler.sh --run-once --dry-run
+```
+
+Chạy một WEEKLY cycle khi scheduler báo `due=true`:
+
+```bash
+bash scripts/run_discovery_scheduler.sh --run-once
+```
+
+Scheduler thực hiện bounded rotating catalog refresh, policy, registry
+reconciliation, ACTIVE-capacity guard và gọi workflow onboarding có lock. Với
+`90 ACTIVE`, `STREAM_MAX_ACTIVE_GAMES=100` và policy tối đa 10 game/cycle,
+capacity hiện tại là 10. State scheduler nằm tại:
+
+```text
+data/state/discovery/scheduler_v1.json
+```
+
+Muốn scheduler tự kiểm tra liên tục, chạy process không có `--run-once`:
+
+```bash
+bash scripts/run_discovery_scheduler.sh
+```
+
+Process này phải được giữ chạy. OS boot auto-start/process supervision là phần
+vận hành riêng.
+
+## 3. Dynamic onboarding thủ công
 
 Chạy discovery trên probe hiện có và xử lý tối đa 10 game theo policy:
 
@@ -56,30 +88,26 @@ bash scripts/run_onboarding_workflow.sh --batch-id <batch-id>
 
 Không chạy hai workflow đồng thời. Lock file sẽ từ chối concurrent run.
 
-## 3. Onboard thêm game
-
-Policy hiện giới hạn 10 game/cycle và 500 historical reviews/game. Chạy các
-cycle tuần tự; không chạy đồng thời:
+Muốn lấy cửa sổ Steam Store Search mới trước khi onboard:
 
 ```bash
-for cycle in 1 2 3; do
-  echo "=== ONBOARDING CYCLE $cycle ==="
-  bash scripts/run_onboarding_workflow.sh --run-discovery || break
-done
+bash scripts/run_onboarding_workflow.sh --run-discovery --refresh-catalog
 ```
 
-Snapshot đã kiểm tra ngày 2026-10-01 là `80 ACTIVE / 87 NEW`. Hai trong ba
-cycle mở rộng từ mốc 60 đã hoàn tất. Nếu mục tiêu vẫn là 90 ACTIVE thì chỉ chạy
-thêm một cycle:
+Không chạy lặp nhiều cycle để vượt safety limit. Capacity guard giữ tổng ACTIVE
+không vượt `STREAM_MAX_ACTIVE_GAMES`; các game vượt capacity vẫn ở trạng thái
+`NEW`. Các entry `QUEUED` hiện hữu được giữ nguyên và chiếm capacity trước.
 
-```bash
-bash scripts/run_onboarding_workflow.sh --run-discovery
+Flow:
+
+```text
+Catalog cursor → Policy → Registry → Capacity guard → QUEUED
+→ Crawl → Bronze → Silver → Gold → Analytics → MongoDB → ACTIVE
 ```
 
-Nếu chạy thêm 30 game từ snapshot 80, kết quả có thể lên 110 ACTIVE và vượt
-`STREAM_MAX_ACTIVE_GAMES=100`. Chỉ nâng safety limit sau khi đánh giá request
-budget và producer cycle duration. Các game vẫn đến từ candidate/probe snapshot
-hiện có; lệnh chưa tự refresh toàn bộ Steam catalog.
+Snapshot runtime đã xác nhận là `90 ACTIVE / 82 NEW / 0 QUEUED`, 45.000
+historical reviews. Chỉ nâng safety limit sau khi đánh giá request budget và
+producer cycle duration.
 
 ## 4. Kiểm tra onboarding
 
@@ -169,19 +197,20 @@ không phải lỗi. Process phải tiếp tục chờ micro-batch và không c�
 Terminal 2:
 
 ```bash
-"$PWD/.venv/bin/python" -m src.streaming.review_producer
+bash scripts/run_review_producer.sh
 ```
 
 Đầu log phải khớp registry, ví dụ snapshot hiện tại:
 
 ```text
-active_game_count=80
-poll_scope_count=80
+active_game_count=90
+poll_scope_count=90
 ```
 
-Sau khi onboarding thêm game, restart producer để reload ACTIVE scope. Spark
-Streaming không cần restart. `STREAM_MAX_ACTIVE_GAMES` mặc định là 100, nên
-90 ACTIVE vẫn nằm trong safety limit.
+Review Producer reload ACTIVE registry ở đầu mỗi polling cycle. Game vừa được
+activate sẽ được bootstrap historical recommendation IDs rồi tự tham gia scope;
+không cần restart producer và không phát lại 500 historical reviews vào Kafka.
+Spark Streaming cũng không cần restart.
 
 ## 7.1 Start Player Count Streaming và Producer
 
@@ -337,17 +366,30 @@ docker exec bda501-namenode hdfs dfs -ls -R \
   /steam/gold/player_count_snapshots_v1 | tail -n 20
 ```
 
-## 12. Các giới hạn vận hành hiện tại
+## 12. Chạy MLlib V1 khi cần retrain
 
-- Chưa có weekly scheduler/process supervisor.
-- Review producer chưa hot-reload registry; player-count producer reload mỗi
-  cycle.
+MLlib là batch retraining trên snapshot động `/steam/gold/base`, không phải
+online learning:
+
+```bash
+export PYSPARK_PYTHON="$PWD/.venv/bin/python"
+export PYSPARK_DRIVER_PYTHON="$PWD/.venv/bin/python"
+
+spark-submit --master 'local[2]' \
+  --conf "spark.hadoop.fs.defaultFS=$HDFS_DEFAULT_FS" \
+  src/ml/run_mllib_v1.py
+```
+
+## 13. Các giới hạn vận hành hiện tại
+
+- WEEKLY scheduler đã có, nhưng process supervisor/OS auto-start chưa có.
+- Review producer và player-count producer đều reload ACTIVE registry mỗi cycle.
 - Review Streaming V1 chỉ hỗ trợ `REVIEW_CREATED`; không theo dõi vote update.
 - Player Count Streaming V1 đã triển khai riêng với
   `PLAYER_COUNT_SNAPSHOT`, `steam_player_events` và `player_count_latest`.
 - Price/metadata/review-update vẫn mới là thiết kế. Xem
   [Near-real-time, Streaming và Batch](03_NEAR_REALTIME_VS_BATCH.md).
-- `--run-discovery` dùng candidate/metadata/review probe files hiện có; chưa tự
-  refresh toàn bộ catalog Steam.
+- Catalog refresh dùng bounded rotating cursor, không crawl toàn bộ Steam trong
+  một lần chạy.
 - Khi Steam API bị chặn, workflow fail ở crawl và có thể resume sau khi mạng
   hoạt động lại.

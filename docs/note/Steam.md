@@ -37,7 +37,8 @@ Operational policy:
 - tối đa 10 game mới/cycle;
 - backfill 500 English reviews/game;
 - ba lần retry với exponential backoff;
-- discovery frequency được mô tả là weekly nhưng chưa có scheduler.
+- discovery frequency `WEEKLY` được thực thi bởi lightweight scheduler; process
+  scheduler phải đang chạy hoặc được gọi bằng `--run-once`.
 
 Policy áp dụng cho game onboarding mới. ACTIVE game không tự bị loại khi policy
 thay đổi; re-evaluation là một operation riêng.
@@ -260,16 +261,16 @@ Nếu cả ba cycle PASS:
 45.000 historical reviews
 ```
 
-Sau đó restart Review Producer. Player Count Producer reload registry ở cycle
-kế tiếp; hai Spark Streaming consumer đang chạy không cần restart. Safety limit
-mặc định của mỗi producer là 100 ACTIVE games.
+Review Producer và Player Count Producer đều reload registry ở cycle kế tiếp;
+hai Spark Streaming consumer đang chạy không cần restart. Safety limit mặc định
+của mỗi producer là 100 ACTIVE games.
 
 ## 12. Điều chưa tự động
 
-- Chưa refresh toàn bộ Steam catalog trong một scheduled production job.
-- Chưa có weekly scheduler/process supervisor.
-- Review producer chưa hot-reload registry; player-count producer đã reload ở
-  đầu mỗi cycle.
+- Scheduler dùng bounded rotating catalog refresh; không crawl toàn bộ catalog
+  Steam trong một cycle.
+- WEEKLY scheduler đã có nhưng chưa có OS process supervisor/auto-start.
+- Review producer và player-count producer đều reload registry đầu mỗi cycle.
 - Chưa có backend API/dashboard cho workflow state.
 - Realtime chưa xử lý price/metadata/vote updates. Player-count snapshot đã có
   pipeline riêng.

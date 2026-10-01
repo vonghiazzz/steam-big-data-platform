@@ -324,8 +324,9 @@ Catalog Refresh V1 stages the Store Search result, metadata probes, and review
 probes before replacing the operational evidence. Its policy defaults are 50
 results per page and at most four pages; a failed later probe leaves the prior
 snapshot in place. Registry reconciliation preserves existing lifecycle states
-and outstanding `QUEUED` games. There is no discovery scheduler yet, and an
-`ACTIVE` game is not demoted or automatically re-evaluated by catalog refresh.
+and outstanding `QUEUED` games. The lightweight WEEKLY scheduler invokes this
+bounded flow with an ACTIVE-capacity guard. An `ACTIVE` game is not demoted or
+automatically re-evaluated by catalog refresh.
 
 The runner performs prepare, historical review crawl, validation, immutable
 incremental Bronze publication, Bronze verification, Silver, Gold, Analytics,

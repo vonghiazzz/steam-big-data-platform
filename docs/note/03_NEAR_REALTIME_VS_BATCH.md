@@ -129,14 +129,13 @@ Khoảng cách giữa hai lần kiểm tra cùng một game
     + STREAM_POLL_INTERVAL_SECONDS
 ```
 
-Ví dụ với 80 ACTIVE games và khoảng nghỉ tối thiểu 1 giây giữa các game, riêng
-phần delay đã gần 79 giây. Thời gian gọi API, phân trang và retry làm cycle dài
+Ví dụ với 90 ACTIVE games và khoảng nghỉ tối thiểu 1 giây giữa các game, riêng
+phần delay đã gần 89 giây. Thời gian gọi API, phân trang và retry làm cycle dài
 hơn nữa. Vì vậy một game thường được kiểm tra lại sau hơn 11 phút, không phải
 đúng 10 phút.
 
-Review Producer nạp danh sách ACTIVE một lần lúc khởi động. Sau khi onboarding
-thêm game mới, cần restart review producer để game mới đi vào polling scope.
-Player Count Producer reload registry ở mỗi cycle và tự nhận ACTIVE game mới.
+Review Producer và Player Count Producer reload registry ở đầu mỗi cycle và tự
+nhận ACTIVE game mới. Không cần restart producer sau onboarding.
 
 ## 5. Spark Structured Streaming hiện hoạt động thế nào?
 
@@ -350,11 +349,11 @@ Review Streaming hiện không tự động:
 - chuyển game từ NEW/QUEUED sang ACTIVE;
 - cập nhật metadata hoặc giá game;
 - cập nhật vote của review cũ;
-- reload danh sách ACTIVE trong producer đang chạy.
+- thay đổi Spark consumer scope; ACTIVE scope được quản lý ở producer.
 
-Concurrent player count đã có luồng riêng và player-count producer reload ACTIVE
-registry mỗi cycle. Các game vừa onboarding chỉ cần restart **review producer**;
-player-count producer tự nhận ở cycle kế tiếp.
+Concurrent player count đã có luồng riêng. Cả review producer và player-count
+producer reload ACTIVE registry mỗi cycle, nên game vừa onboarding được nhận ở
+cycle kế tiếp mà không cần restart.
 
 ### 11.1 Trạng thái mở rộng streaming
 
