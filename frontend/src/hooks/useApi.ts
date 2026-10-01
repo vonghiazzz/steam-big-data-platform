@@ -26,11 +26,18 @@ export const usePlatforms = () => useSWR([src, "platforms"], () => api.platforms
 export const useCategories = () => useSWR([src, "categories"], () => api.categories(), historical);
 export const usePurchase = () => useSWR([src, "purchase"], () => api.purchase(), historical);
 
-export const useRecentReviews = (limit = 20, appid?: number) =>
-  useSWR([src, "realtime/reviews", limit, appid ?? null], () => api.recentReviews(limit, appid), realtime);
+export const useRecentReviews = (limit = 20, appid?: number, onSuccess?: () => void) =>
+  useSWR([src, "realtime/reviews", limit, appid ?? null], () => api.recentReviews(limit, appid), {
+    ...realtime,
+    onSuccess,
+  });
 
-export const useRealtimeGames = (limit = 20) =>
-  useSWR([src, "realtime/games", limit], () => api.realtimeGames(limit), realtime);
+export const useRealtimeGames = (limit = 20, onSuccess?: () => void) =>
+  useSWR([src, "realtime/games", limit], () => api.realtimeGames(limit), { ...realtime, onSuccess });
 
-export const useRealtimeGame = (appid: number | null, limit = 24) =>
-  useSWR(appid === null ? null : [src, "realtime/game", appid, limit], () => api.realtimeGame(appid as number, limit), realtime);
+export const useRealtimeGame = (appid: number | null, limit = 24, onSuccess?: () => void) =>
+  useSWR(
+    appid === null ? null : [src, "realtime/game", appid, limit],
+    () => api.realtimeGame(appid as number, limit),
+    { ...realtime, onSuccess },
+  );
