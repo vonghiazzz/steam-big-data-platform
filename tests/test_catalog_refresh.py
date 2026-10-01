@@ -1,12 +1,15 @@
+import json
+import os
 import tempfile
 import unittest
+from contextlib import ExitStack
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from src.common.jsonl import read_jsonl, write_jsonl
-from src.discovery.catalog_probe import probe_catalog
+from src.discovery.catalog_probe import CatalogProbeResult, probe_catalog
 from src.discovery.policy import load_discovery_policy
 from src.discovery.refresh_catalog import refresh_catalog
 from src.discovery.registry import (
@@ -35,11 +38,27 @@ def valid_candidate(appid: int) -> dict:
     }
 
 
-def staged_probe(output_dir: Path, page_size: int, max_pages: int, delay: float):
-    del page_size, max_pages, delay
+def staged_probe(
+    output_dir: Path,
+    page_size: int,
+    max_pages: int,
+    delay: float,
+    start_offset: int,
+):
+    del delay
     write_jsonl(
         output_dir / "candidates.jsonl",
         [{"appid": 10, "title": "Ten"}, {"appid": 20, "title": "Twenty"}],
+    )
+    offsets = tuple(
+        start_offset + page_index * page_size for page_index in range(max_pages)
+    )
+    return CatalogProbeResult(
+        candidates=({"appid": 10}, {"appid": 20}),
+        start_offset=start_offset,
+        requested_offsets=offsets,
+        next_offset=offsets[-1] + page_size,
+        reported_total_count=269151,
     )
 
 
@@ -114,10 +133,10 @@ class CatalogRefreshTest(unittest.TestCase):
             with patch(
                 "src.discovery.catalog_probe.requests.get", side_effect=responses
             ) as request:
-                rows = probe_catalog(Path(directory), 2, 2, 0)
+                result = probe_catalog(Path(directory), 2, 2, 0)
 
             self.assertEqual(2, request.call_count)
-            self.assertEqual([10, 20], [row["appid"] for row in rows])
+            self.assertEqual([10, 20], [row["appid"] for row in result.candidates])
             self.assertEqual(
                 [10, 20],
                 [row["appid"] for row in read_jsonl(Path(directory) / "candidates.jsonl")],
@@ -126,6 +145,33 @@ class CatalogRefreshTest(unittest.TestCase):
                 [0, 2],
                 [call.kwargs["params"]["start"] for call in request.call_args_list],
             )
+            self.assertEqual((0, 2), result.requested_offsets)
+            self.assertEqual(4, result.next_offset)
+
+    def test_no_state_starts_at_zero_and_success_advances_cursor(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self._snapshot_paths(Path(directory))
+            self._write_previous_snapshot(paths)
+            with self._successful_stages():
+                result = self._refresh(paths)
+
+            self.assertEqual(0, result.start_offset)
+            self.assertEqual((0,), result.requested_offsets)
+            self.assertEqual(50, result.next_offset)
+            self.assertEqual(50, self._read_cursor(paths))
+
+    def test_second_success_starts_from_previous_next_offset(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self._snapshot_paths(Path(directory))
+            self._write_previous_snapshot(paths)
+            with self._successful_stages():
+                first = self._refresh(paths)
+                second = self._refresh(paths)
+
+            self.assertEqual((0, 50), (first.start_offset, first.next_offset))
+            self.assertEqual((50, 100), (second.start_offset, second.next_offset))
+            self.assertEqual((50,), second.requested_offsets)
+            self.assertEqual(100, self._read_cursor(paths))
 
     def test_configured_bound_rejects_unbounded_override(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -149,6 +195,7 @@ class CatalogRefreshTest(unittest.TestCase):
                     root = Path(directory)
                     paths = self._snapshot_paths(root)
                     previous = self._write_previous_snapshot(paths)
+                    previous_state = self._write_cursor(paths, 150)
 
                     metadata_effect = (
                         RuntimeError("metadata failed")
@@ -175,8 +222,67 @@ class CatalogRefreshTest(unittest.TestCase):
 
                     self.assertEqual(
                         previous,
-                        {name: path.read_bytes() for name, path in paths.items()},
+                        self._snapshot_bytes(paths),
                     )
+                    self.assertEqual(previous_state, paths["state"].read_bytes())
+
+    def test_failed_catalog_fetch_does_not_advance_or_replace_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self._snapshot_paths(Path(directory))
+            previous = self._write_previous_snapshot(paths)
+            previous_state = self._write_cursor(paths, 200)
+
+            with patch(
+                "src.discovery.refresh_catalog.probe_catalog",
+                side_effect=RuntimeError("catalog failed"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "catalog failed"):
+                    self._refresh(paths)
+
+            self.assertEqual(previous, self._snapshot_bytes(paths))
+            self.assertEqual(previous_state, paths["state"].read_bytes())
+
+    def test_failed_promotion_does_not_advance_or_replace_snapshot(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self._snapshot_paths(Path(directory))
+            previous = self._write_previous_snapshot(paths)
+            previous_state = self._write_cursor(paths, 250)
+
+            with self._successful_stages(), patch(
+                "src.discovery.refresh_catalog._promote_files",
+                side_effect=RuntimeError("promotion failed"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "promotion failed"):
+                    self._refresh(paths)
+
+            self.assertEqual(previous, self._snapshot_bytes(paths))
+            self.assertEqual(previous_state, paths["state"].read_bytes())
+
+    def test_failed_staged_validation_keeps_snapshot_and_cursor(self):
+        def mismatched_metadata(input_path: Path, output_dir: Path, delay: float):
+            del input_path, delay
+            write_jsonl(output_dir / "metadata_probe_raw.jsonl", [{"appid": 10}])
+            write_jsonl(output_dir / "eligible_games.jsonl", [{"appid": 10}])
+
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self._snapshot_paths(Path(directory))
+            previous = self._write_previous_snapshot(paths)
+            previous_state = self._write_cursor(paths, 300)
+            with patch(
+                "src.discovery.refresh_catalog.probe_catalog",
+                side_effect=staged_probe,
+            ), patch(
+                "src.discovery.refresh_catalog.qualify_catalog",
+                side_effect=mismatched_metadata,
+            ), patch(
+                "src.discovery.refresh_catalog.qualify_reviews",
+                side_effect=staged_reviews,
+            ):
+                with self.assertRaisesRegex(ValueError, "Metadata probe AppIDs"):
+                    self._refresh(paths)
+
+            self.assertEqual(previous, self._snapshot_bytes(paths))
+            self.assertEqual(previous_state, paths["state"].read_bytes())
 
     def test_successful_refresh_promotes_complete_staged_snapshot(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -202,6 +308,54 @@ class CatalogRefreshTest(unittest.TestCase):
             self.assertEqual(
                 [10, 20], [row["appid"] for row in read_jsonl(paths["candidates"])]
             )
+            self.assertEqual(50, self._read_cursor(paths))
+
+    def test_cursor_state_is_promoted_with_atomic_replace(self):
+        with tempfile.TemporaryDirectory() as directory:
+            paths = self._snapshot_paths(Path(directory))
+            self._write_previous_snapshot(paths)
+            real_replace = os.replace
+            with self._successful_stages(), patch(
+                "src.discovery.refresh_catalog.os.replace",
+                wraps=real_replace,
+            ) as replace:
+                self._refresh(paths)
+
+            state_replaces = [
+                call
+                for call in replace.call_args_list
+                if Path(call.args[1]) == paths["state"]
+            ]
+            self.assertEqual(1, len(state_replaces))
+            self.assertTrue(Path(state_replaces[0].args[0]).name.endswith(".tmp"))
+            self.assertEqual(50, self._read_cursor(paths))
+
+    def test_end_of_catalog_wraps_next_successful_cycle_to_zero(self):
+        first_html = """
+        <a class="search_result_row" data-ds-appid="10"><span class="title">Ten</span></a>
+        <a class="search_result_row" data-ds-appid="20"><span class="title">Twenty</span></a>
+        """
+        last_html = """
+        <a class="search_result_row" data-ds-appid="30"><span class="title">Thirty</span></a>
+        """
+        responses = []
+        for html in (first_html, last_html):
+            response = Mock(status_code=200)
+            response.json.return_value = {
+                "success": 1,
+                "total_count": 3,
+                "results_html": html,
+            }
+            responses.append(response)
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "src.discovery.catalog_probe.requests.get", side_effect=responses
+        ):
+            result = probe_catalog(Path(directory), 2, 4, 0)
+
+        self.assertEqual((0, 2), result.requested_offsets)
+        self.assertEqual(0, result.next_offset)
+        self.assertEqual([10, 20, 30], [row["appid"] for row in result.candidates])
 
     def test_lifecycle_and_queue_reconciliation_preserve_existing_state(self):
         policy = replace(
@@ -256,6 +410,7 @@ class CatalogRefreshTest(unittest.TestCase):
             metadata_path=paths["metadata"],
             eligible_path=paths["eligible"],
             review_probe_path=paths["reviews"],
+            state_path=paths["state"],
             max_pages=1,
             delay=0,
         )
@@ -268,6 +423,7 @@ class CatalogRefreshTest(unittest.TestCase):
             "eligible": root / "eligible_games.jsonl",
             "reviews": root / "review_probe.jsonl",
             "registry": root / "registry.jsonl",
+            "state": root / "state" / "catalog_refresh_v1.json",
         }
 
     @staticmethod
@@ -288,7 +444,62 @@ class CatalogRefreshTest(unittest.TestCase):
                 }
             ],
         )
-        return {name: path.read_bytes() for name, path in paths.items()}
+        return CatalogRefreshTest._snapshot_bytes(paths)
+
+    @staticmethod
+    def _snapshot_bytes(paths: dict[str, Path]) -> dict[str, bytes]:
+        return {
+            name: paths[name].read_bytes()
+            for name in ("candidates", "metadata", "eligible", "reviews", "registry")
+        }
+
+    @staticmethod
+    def _write_cursor(paths: dict[str, Path], next_offset: int) -> bytes:
+        paths["state"].parent.mkdir(parents=True, exist_ok=True)
+        paths["state"].write_text(
+            json.dumps(
+                {
+                    "next_offset": next_offset,
+                    "updated_at": "2026-10-01T00:00:00+00:00",
+                    "last_successful_refresh": "2026-10-01T00:00:00+00:00",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return paths["state"].read_bytes()
+
+    @staticmethod
+    def _read_cursor(paths: dict[str, Path]) -> int:
+        return json.loads(paths["state"].read_text(encoding="utf-8"))["next_offset"]
+
+    @staticmethod
+    def _successful_stages():
+        return _SuccessfulStages()
+
+
+class _SuccessfulStages:
+    def __enter__(self):
+        self.stack = ExitStack()
+        self.stack.enter_context(
+            patch("src.discovery.refresh_catalog.probe_catalog", side_effect=staged_probe)
+        )
+        self.stack.enter_context(
+            patch(
+                "src.discovery.refresh_catalog.qualify_catalog",
+                side_effect=staged_metadata,
+            )
+        )
+        self.stack.enter_context(
+            patch(
+                "src.discovery.refresh_catalog.qualify_reviews",
+                side_effect=staged_reviews,
+            )
+        )
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return self.stack.__exit__(exc_type, exc_value, traceback)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 import argparse
 import json
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 import requests
@@ -29,6 +30,15 @@ HEADERS = {
 DEFAULT_PAGE_SIZE = 50
 DEFAULT_MAX_PAGES = 4
 DEFAULT_DELAY_SECONDS = 1.0
+
+
+@dataclass(frozen=True)
+class CatalogProbeResult:
+    candidates: tuple[dict, ...]
+    start_offset: int
+    requested_offsets: tuple[int, ...]
+    next_offset: int
+    reported_total_count: int | None
 
 
 def parse_results_html(
@@ -109,7 +119,16 @@ def probe_catalog(
     page_size: int,
     max_pages: int,
     delay: float,
-) -> list[dict]:
+    start_offset: int = 0,
+) -> CatalogProbeResult:
+    """Fetch a bounded search window and calculate its next cursor.
+
+    Steam reports ``total_count`` with each Store Search response. A successful
+    window that reaches or passes that total wraps the next cycle to offset 0.
+    An empty page is treated as the same conservative end-of-catalog signal.
+    """
+    if start_offset < 0:
+        raise ValueError("start_offset must be non-negative")
     output_dir.mkdir(
         parents=True,
         exist_ok=True,
@@ -126,6 +145,8 @@ def probe_catalog(
     total_received = 0
     duplicate_count = 0
     reported_total_count = None
+    requested_offsets = []
+    reached_end = False
 
     print("=" * 80)
     print(
@@ -136,10 +157,8 @@ def probe_catalog(
     for page_index in range(
         max_pages
     ):
-        start = (
-            page_index
-            * page_size
-        )
+        start = start_offset + page_index * page_size
+        requested_offsets.append(start)
 
         params = {
             "query": "",
@@ -217,15 +236,14 @@ def probe_catalog(
             encoding="utf-8",
         )
 
-        if (
-            reported_total_count
-            is None
-        ):
-            reported_total_count = (
-                payload.get(
-                    "total_count"
-                )
-            )
+        if reported_total_count is None:
+            raw_total_count = payload.get("total_count")
+            try:
+                parsed_total_count = int(raw_total_count)
+            except (TypeError, ValueError):
+                parsed_total_count = None
+            if parsed_total_count is not None and parsed_total_count >= 0:
+                reported_total_count = parsed_total_count
 
         rows = (
             parse_results_html(
@@ -281,9 +299,14 @@ def probe_catalog(
             - new_count,
         )
 
-        time.sleep(
-            delay
+        reached_end = not rows or (
+            reported_total_count is not None
+            and start + page_size >= reported_total_count
         )
+        if reached_end:
+            break
+
+        time.sleep(delay)
 
     write_jsonl(
         candidates_path,
@@ -340,7 +363,18 @@ def probe_catalog(
     print(
         candidates_path
     )
-    return all_candidates
+    next_offset = (
+        0
+        if reached_end
+        else requested_offsets[-1] + page_size
+    )
+    return CatalogProbeResult(
+        candidates=tuple(all_candidates),
+        start_offset=start_offset,
+        requested_offsets=tuple(requested_offsets),
+        next_offset=next_offset,
+        reported_total_count=reported_total_count,
+    )
 
 
 def main():
@@ -380,6 +414,12 @@ def main():
         ),
     )
 
+    parser.add_argument(
+        "--start-offset",
+        type=int,
+        default=0,
+    )
+
     args = (
         parser.parse_args()
     )
@@ -399,6 +439,11 @@ def main():
             "--delay must be >= 0"
         )
 
+    if args.start_offset < 0:
+        parser.error(
+            "--start-offset must be >= 0"
+        )
+
     probe_catalog(
         output_dir=(
             args.output_dir
@@ -410,6 +455,7 @@ def main():
             args.max_pages
         ),
         delay=args.delay,
+        start_offset=args.start_offset,
     )
 
 

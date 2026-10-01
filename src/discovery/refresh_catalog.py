@@ -9,14 +9,16 @@ import shutil
 import tempfile
 import uuid
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, Mapping
 
 from ..common.jsonl import read_jsonl
-from .catalog_probe import probe_catalog
+from .catalog_probe import CatalogProbeResult, probe_catalog
 from .catalog_qualify import qualify_catalog
 from .paths import (
     CANDIDATES_PATH,
+    CATALOG_REFRESH_STATE_PATH,
     ELIGIBLE_GAMES_PATH,
     METADATA_PROBE_PATH,
     REGISTRY_PATH,
@@ -29,6 +31,9 @@ from .review_qualify import qualify_reviews
 
 @dataclass(frozen=True)
 class CatalogRefreshResult:
+    start_offset: int
+    next_offset: int
+    requested_offsets: tuple[int, ...]
     page_size: int
     max_pages: int
     candidate_count: int
@@ -40,6 +45,7 @@ class CatalogRefreshResult:
 
     def to_dict(self) -> dict:
         payload = asdict(self)
+        payload["requested_offsets"] = list(self.requested_offsets)
         payload["unseen_appids"] = list(self.unseen_appids)
         return payload
 
@@ -53,6 +59,7 @@ def refresh_catalog(
     metadata_path: Path,
     eligible_path: Path,
     review_probe_path: Path,
+    state_path: Path = CATALOG_REFRESH_STATE_PATH,
     page_size: int | None = None,
     max_pages: int | None = None,
     delay: float | None = None,
@@ -74,6 +81,8 @@ def refresh_catalog(
     if effective_delay < 0:
         raise ValueError("delay must be non-negative")
 
+    start_offset = load_cursor_state(state_path)
+
     staging_parent = candidates_path.parent
     staging_parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(
@@ -85,12 +94,15 @@ def refresh_catalog(
         staged_eligible = staging / "eligible_games.jsonl"
         staged_reviews = staging / "review_probe.jsonl"
 
-        probe_catalog(
+        probe_result = probe_catalog(
             staging,
             page_size=effective_page_size,
             max_pages=effective_max_pages,
             delay=effective_delay,
+            start_offset=start_offset,
         )
+        if not isinstance(probe_result, CatalogProbeResult):
+            raise TypeError("Catalog probe did not return cursor metadata")
         qualify_catalog(staged_candidates, staging, effective_delay)
         qualify_reviews(
             staged_eligible,
@@ -108,17 +120,37 @@ def refresh_catalog(
         candidate_ids = _unique_appids(read_jsonl(staged_candidates), "candidates")
         registry_ids = set(load_registry(registry_path))
 
+        successful_at = datetime.now(timezone.utc).isoformat()
+        staged_state = staging / "catalog_refresh_state.json"
+        staged_state.write_text(
+            json.dumps(
+                {
+                    "next_offset": probe_result.next_offset,
+                    "updated_at": successful_at,
+                    "last_successful_refresh": successful_at,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
         _promote_files(
             {
                 staged_candidates: candidates_path,
                 staged_metadata: metadata_path,
                 staged_eligible: eligible_path,
                 staged_reviews: review_probe_path,
+                staged_state: state_path,
             }
         )
 
     unseen = tuple(sorted(candidate_ids - registry_ids))
     return CatalogRefreshResult(
+        start_offset=probe_result.start_offset,
+        next_offset=probe_result.next_offset,
+        requested_offsets=probe_result.requested_offsets,
         page_size=effective_page_size,
         max_pages=effective_max_pages,
         candidate_count=counts["candidate_count"],
@@ -128,6 +160,22 @@ def refresh_catalog(
         known_candidate_count=len(candidate_ids & registry_ids),
         unseen_appids=unseen,
     )
+
+
+def load_cursor_state(path: Path) -> int:
+    """Return the persisted next offset, defaulting to the first page."""
+    if not path.exists():
+        return 0
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Invalid catalog refresh state JSON: {path}") from exc
+    next_offset = payload.get("next_offset")
+    if isinstance(next_offset, bool) or not isinstance(next_offset, int):
+        raise ValueError("Catalog refresh next_offset must be an integer")
+    if next_offset < 0:
+        raise ValueError("Catalog refresh next_offset must be non-negative")
+    return next_offset
 
 
 def validate_staged_evidence(
@@ -247,6 +295,7 @@ def main() -> int:
     parser.add_argument("--metadata-path", type=Path, default=METADATA_PROBE_PATH)
     parser.add_argument("--eligible-path", type=Path, default=ELIGIBLE_GAMES_PATH)
     parser.add_argument("--review-probe-path", type=Path, default=REVIEW_PROBE_PATH)
+    parser.add_argument("--state-path", type=Path, default=CATALOG_REFRESH_STATE_PATH)
     parser.add_argument("--page-size", type=int, default=None)
     parser.add_argument("--max-pages", type=int, default=None)
     parser.add_argument("--delay", type=float, default=None)
@@ -260,6 +309,7 @@ def main() -> int:
         metadata_path=args.metadata_path,
         eligible_path=args.eligible_path,
         review_probe_path=args.review_probe_path,
+        state_path=args.state_path,
         page_size=args.page_size,
         max_pages=args.max_pages,
         delay=args.delay,
