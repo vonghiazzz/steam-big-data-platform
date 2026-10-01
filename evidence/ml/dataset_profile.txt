@@ -1,0 +1,19 @@
+run_id=20261001T083236Z
+input_path=/steam/gold/base
+dataset_fingerprint=073993c836ef868eba04a8707a08e51fe0a593ce9e20b1b1c19f8853886bfb96
+rows=40000
+unique_recommendationid=40000
+null_recommendationid=0
+distinct_appids=80
+positive=31398
+negative=8602
+invalid_voted_up=0
+candidate_feature_null_counts:
+  playtime_at_review=499
+  steam_purchase=0
+  received_for_free=0
+  is_free=0
+  price=0
+  genres=500
+  categories=0
+  platforms=0
