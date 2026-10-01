@@ -62,8 +62,67 @@ class PollResult:
     hit_known_review: bool
 
 
+@dataclass(frozen=True)
+class ActiveScopeReload:
+    entries: tuple[RegistryEntry, ...]
+    added_appids: tuple[int, ...]
+    removed_appids: tuple[int, ...]
+    counts: Mapping[str, int]
+
+
 class SafetyGapError(RuntimeError):
     """Raised when bounded polling cannot reconnect to known state."""
+
+
+class ActiveScopeSafetyError(RuntimeError):
+    """Raised rather than silently truncating an oversized ACTIVE scope."""
+
+
+class ActiveScopeTracker:
+    """Reload and reconcile the registry-backed polling scope per cycle."""
+
+    def __init__(
+        self,
+        *,
+        registry_path: Path,
+        max_active_games: int,
+        max_games: int | None = None,
+    ) -> None:
+        if max_active_games <= 0:
+            raise ValueError("STREAM_MAX_ACTIVE_GAMES must be positive")
+        if max_games is not None and max_games <= 0:
+            raise ValueError("--max-games must be positive")
+        self.registry_path = registry_path
+        self.max_active_games = max_active_games
+        self.max_games = max_games
+        self._entries: tuple[RegistryEntry, ...] = ()
+
+    @property
+    def entries(self) -> tuple[RegistryEntry, ...]:
+        return self._entries
+
+    def reload(self) -> ActiveScopeReload:
+        active, counts = load_active_scope(self.registry_path)
+        if counts["active"] > self.max_active_games:
+            raise ActiveScopeSafetyError(
+                f"ACTIVE count {counts['active']} exceeds "
+                f"STREAM_MAX_ACTIVE_GAMES={self.max_active_games}"
+            )
+
+        selected = tuple(
+            active if self.max_games is None else active[: self.max_games]
+        )
+        previous_appids = {entry.appid for entry in self._entries}
+        current_appids = {entry.appid for entry in selected}
+        result = ActiveScopeReload(
+            entries=selected,
+            added_appids=tuple(sorted(current_appids - previous_appids)),
+            removed_appids=tuple(sorted(previous_appids - current_appids)),
+            counts=counts,
+        )
+        # Commit the in-memory scope only after the load and safety checks pass.
+        self._entries = selected
+        return result
 
 
 class SteamReviewClient:
@@ -328,6 +387,21 @@ def ensure_disk_safety(path: Path, minimum_free_gb: float) -> None:
         )
 
 
+def log_scope_reload(scope: ActiveScopeReload) -> None:
+    print(f"registry_total={scope.counts['total']}")
+    print(f"active_game_count={scope.counts['active']}")
+    print(f"retired_game_count={scope.counts['retired']}")
+    print(f"poll_scope_count={len(scope.entries)}")
+    print(
+        "newly_active_appids="
+        + ",".join(str(appid) for appid in scope.added_appids)
+    )
+    print(
+        "removed_from_scope_appids="
+        + ",".join(str(appid) for appid in scope.removed_appids)
+    )
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true", help="run one bounded poll")
@@ -362,27 +436,25 @@ def main() -> int:
         print(f"Registry does not exist: {args.registry}")
         return 2
 
-    active, counts = load_active_scope(args.registry)
-    print(f"registry_total={counts['total']}")
-    print(f"active_game_count={counts['active']}")
-    print(f"retired_game_count={counts['retired']}")
-
     max_active = int(os.getenv("STREAM_MAX_ACTIVE_GAMES", "100"))
-    if counts["active"] > max_active:
-        print(
-            f"Safety stop: ACTIVE count {counts['active']} exceeds "
-            f"STREAM_MAX_ACTIVE_GAMES={max_active}"
+    try:
+        scope_tracker = ActiveScopeTracker(
+            registry_path=args.registry,
+            max_active_games=max_active,
+            max_games=args.max_games,
         )
+        initial_scope = scope_tracker.reload()
+    except (ValueError, ActiveScopeSafetyError) as exc:
+        print(f"Safety stop: {exc}")
         return 2
-    if not active:
+    except Exception as exc:
+        print(f"Registry load failed: {exc}")
+        return 2
+
+    log_scope_reload(initial_scope)
+    if not initial_scope.entries:
         print("No ACTIVE games; producer stopped cleanly")
         return 0
-    if args.max_games is not None:
-        if args.max_games <= 0:
-            print("--max-games must be positive")
-            return 2
-        active = active[: args.max_games]
-    print(f"poll_scope_count={len(active)}")
 
     poll_interval = int(os.getenv("STREAM_POLL_INTERVAL_SECONDS", "600"))
     minimum_poll_interval = int(
@@ -440,14 +512,39 @@ def main() -> int:
                 request_delay_seconds=request_delay,
                 baseline_source=baseline_source,
             )
+            scope = initial_scope
+            first_cycle = True
             while True:
+                if first_cycle:
+                    first_cycle = False
+                else:
+                    try:
+                        scope = scope_tracker.reload()
+                    except ActiveScopeSafetyError as exc:
+                        print(f"Safety stop: {exc}")
+                        return 2
+                    except Exception as exc:
+                        print(f"registry_reload_error={exc}")
+                        if args.once:
+                            return 2
+                        time.sleep(poll_interval)
+                        continue
+                    log_scope_reload(scope)
+
+                if not scope.entries:
+                    print("No ACTIVE games in current polling cycle")
+                    if args.once:
+                        break
+                    time.sleep(poll_interval)
+                    continue
+
                 try:
                     ensure_disk_safety(PROJECT_ROOT, minimum_free_gb)
                 except RuntimeError as exc:
                     print(exc)
                     return 2
                 cycle_emitted = 0
-                for index, entry in enumerate(active):
+                for index, entry in enumerate(scope.entries):
                     try:
                         result = service.poll_game(entry.appid)
                         cycle_emitted += result.emitted
@@ -457,7 +554,7 @@ def main() -> int:
                         )
                     except Exception as exc:
                         print(f"appid={entry.appid} poll_error={exc}")
-                    if index + 1 < len(active) and request_delay > 0:
+                    if index + 1 < len(scope.entries) and request_delay > 0:
                         time.sleep(request_delay)
                 print(f"cycle_emitted={cycle_emitted}")
                 if args.once:
