@@ -178,8 +178,24 @@ HDFS_GOLD_BASE_INCREMENTAL_V1 = (
     f"{HDFS_GOLD_ROOT}/base_incremental_v1"
 )
 
+HDFS_BRONZE_PLAYER_COUNT_EVENTS = (
+    f"{HDFS_BRONZE_ROOT}/player_count_events"
+)
+
+HDFS_SILVER_PLAYER_COUNT_SNAPSHOTS_V1 = (
+    f"{HDFS_SILVER_ROOT}/player_count_snapshots_v1"
+)
+
+HDFS_GOLD_PLAYER_COUNT_SNAPSHOTS_V1 = (
+    f"{HDFS_GOLD_ROOT}/player_count_snapshots_v1"
+)
+
 HDFS_REVIEW_EVENTS_QUARANTINE = (
     f"{HDFS_STEAM_ROOT}/quarantine/review_events"
+)
+
+HDFS_PLAYER_COUNT_EVENTS_QUARANTINE = (
+    f"{HDFS_STEAM_ROOT}/quarantine/player_count_events"
 )
 
 HDFS_REVIEW_BRONZE_CHECKPOINT_V1 = (
@@ -196,6 +212,22 @@ HDFS_REVIEW_QUARANTINE_CHECKPOINT_V1 = (
 
 HDFS_REVIEW_GOLD_CHECKPOINT_V1 = (
     f"{HDFS_STEAM_ROOT}/checkpoints/review_gold_v1"
+)
+
+HDFS_PLAYER_COUNT_BRONZE_CHECKPOINT_V1 = (
+    f"{HDFS_STEAM_ROOT}/checkpoints/player_count_bronze_v1"
+)
+
+HDFS_PLAYER_COUNT_SILVER_CHECKPOINT_V1 = (
+    f"{HDFS_STEAM_ROOT}/checkpoints/player_count_silver_v1"
+)
+
+HDFS_PLAYER_COUNT_GOLD_CHECKPOINT_V1 = (
+    f"{HDFS_STEAM_ROOT}/checkpoints/player_count_gold_v1"
+)
+
+HDFS_PLAYER_COUNT_QUARANTINE_CHECKPOINT_V1 = (
+    f"{HDFS_STEAM_ROOT}/checkpoints/player_count_quarantine_v1"
 )
 
 HADOOP_NAMENODE_CONTAINER = (

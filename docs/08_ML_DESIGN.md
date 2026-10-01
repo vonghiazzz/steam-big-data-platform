@@ -2,7 +2,10 @@
 
 ## Status and objective
 
-Spark MLlib modeling is **Planned**. The binary target is `voted_up` (`1` recommend, `0` not recommend). The experiment asks whether player behavior and game characteristics can predict recommendation behavior.
+Spark MLlib V1 is **implemented and runtime validated**. The binary target is
+`voted_up` (`1` recommend, `0` not recommend). Each run is a fresh batch
+retraining over the current dynamic `/steam/gold/base`; it is not online model
+learning.
 
 The primary model does not use review text, so NLP is outside the primary experiment.
 
@@ -10,24 +13,27 @@ The primary model does not use review text, so NLP is outside the primary experi
 
 ### Player behavior
 
-- `playtime_at_review`
-- `playtime_forever`
+- `log1p(playtime_at_review)`
 - `steam_purchase`
 - `received_for_free`
 
 ### Game metadata
 
 - `is_free`
-- price derived from the relevant price snapshot
+- `log1p(price)` derived from crawl-time game metadata
 - `genres`
 - `platforms`
 - `categories`
 
-Arrays/categorical fields require deterministic encoding. Numeric playtime may need log transformation or robust handling because Steam playtime is strongly skewed.
+Genres and categories use binary `CountVectorizer`; platforms use explicit
+Windows/macOS/Linux flags. Imputation and vocabularies are fitted on training
+data only. `playtime_forever` is excluded from the primary model because it may
+contain information observed after review creation.
 
 ## Models and evaluation
 
-Two planned models provide complementary baselines:
+The majority-class baseline and two trained models provide complementary
+comparisons:
 
 - **Logistic Regression:** interpretable linear baseline
 - **Random Forest:** nonlinear interactions and feature importance
@@ -39,6 +45,7 @@ Report at least:
 - Recall
 - F1
 - ROC-AUC
+- PR-AUC
 - Confusion Matrix
 
 Metrics must be interpreted with class balance. Model comparison should use the same train/test split, seed, feature contract, and dataset snapshot.
@@ -55,6 +62,18 @@ Features must be available at the intended prediction time. Potential leakage in
 
 The experiment should document the prediction scenario before accepting a feature. Where appropriate, use temporal or grouped splits and compare them with a simple seeded baseline split.
 
-## Reproducible snapshots
+## Dynamic snapshot reproducibility
 
-ML experiments use fixed, versioned Silver/Gold snapshots. The current 50-game, 25,000-review cohort is one such research snapshot, not a registry limit. Each run should record snapshot/version, schema, feature list, split seed/rule, preprocessing parameters, model hyperparameters, software version, and evaluation outputs. Dynamic onboarding or streaming updates must not silently mutate the dataset behind a reported experiment.
+Gold Base grows through onboarding, so counts are integrity observations rather
+than fixed acceptance constants. Each run records a UTC run ID, input path,
+game/review/label counts, deterministic dataset fingerprint, split seed,
+feature contract, class weights, model parameters, metrics, and output paths.
+Evidence is stored under `evidence/ml/`; PipelineModels are saved under
+`/steam/models/mllib/v1`.
+
+## Model persistence
+
+Each V1 run currently overwrites
+`/steam/models/mllib/v1/logistic_regression` and
+`/steam/models/mllib/v1/random_forest`. Model versioning, retention, comparison,
+and promotion are future work and are intentionally outside MLlib V1.

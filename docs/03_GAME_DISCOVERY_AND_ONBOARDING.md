@@ -11,7 +11,77 @@ Periodic Catalog Discovery
 -> Game Registry / Watchlist
 ```
 
-Catalog probing, the initial research selection, the versioned policy configuration/evaluator, and the local JSONL Discovery Control Plane V1 are **Implemented**. A production registry service, scheduler, and admin interface remain **Design-only**.
+Catalog probing, the initial research selection, the versioned policy configuration/evaluator, the local JSONL Discovery Control Plane V1, and the lightweight WEEKLY scheduler are **Implemented**. A production registry service and admin interface remain **Design-only**.
+
+## Bounded fresh catalog refresh
+
+Catalog Refresh V1 is an explicit network operation:
+
+```text
+Steam Store Search
+-> bounded candidate AppIDs
+-> metadata probe
+-> review-availability probe
+-> existing qualification policy
+-> registry and onboarding queue reconciliation
+```
+
+Run the complete onboarding workflow with a fresh catalog window using:
+
+```bash
+bash scripts/run_onboarding_workflow.sh --run-discovery --refresh-catalog
+```
+
+Without `--refresh-catalog`, discovery continues to use the existing local
+probe snapshot. The configured default refresh is bounded to 50 results per
+page and four pages; it never attempts to mirror the complete Steam catalog.
+All probe output is produced and validated in staging first. Candidate,
+metadata, eligible-game, and review-probe evidence replaces the operational
+snapshot only after every stage completes consistently, so a later-stage
+failure leaves the previous snapshot usable.
+
+## WEEKLY discovery scheduler
+
+Run one safe planning cycle without Steam or onboarding writes:
+
+```bash
+bash scripts/run_discovery_scheduler.sh --run-once --dry-run
+```
+
+Run one due cycle with the configured workflow:
+
+```bash
+bash scripts/run_discovery_scheduler.sh --run-once
+```
+
+Without `--run-once`, the process periodically checks whether the current UTC
+ISO week has already completed. State is stored in
+`data/state/discovery/scheduler_v1.json`, and a non-blocking scheduler lock
+prevents overlapping scheduler runs. The onboarding workflow retains its own
+compatible `.workflow.lock` and batch state; a failed or paused batch is
+resumed by batch ID before any conflicting batch can start.
+
+The scheduled flow is:
+
+```text
+WEEKLY scheduler
+-> rotating catalog refresh
+-> qualification policy
+-> registry reconciliation
+-> ACTIVE capacity guard
+-> resumable onboarding
+-> ACTIVE
+```
+
+Capacity is calculated as
+`min(max_new_games_per_cycle, max_active_games - active_count)`, bounded at
+zero. Existing `QUEUED` games reserve slots before additional `NEW` games are
+queued. At capacity zero, discovery may still refresh and reconcile candidates,
+but NEW games remain NEW and onboarding is skipped safely.
+
+Scheduler automation requires this scheduler process to be running. OS boot
+auto-start and external process supervision remain separate operational
+concerns.
 
 ## Qualification versus onboarding
 
@@ -35,6 +105,8 @@ Onboarding answers **“If eligible, should/how should it be onboarded?”** Its
 |---|---:|
 | Historical target | 500 reviews/game |
 | Maximum new games per discovery cycle | 10 |
+| Catalog refresh page size | 50 |
+| Maximum catalog pages per refresh | 4 |
 | Discovery frequency | `WEEKLY` |
 | Maximum retry attempts | 3 |
 
@@ -91,9 +163,9 @@ Optional terminal state: RETIRED
 
 The registry is control metadata. Raw game/review records remain in HDFS Bronze. A future registry entry should track the AppID, canonical name, lifecycle state, discovery and qualification timestamps, policy version, backfill status, source cursor/version, polling state, and failure/retry reason.
 
-Discovery Control Plane V1 uses `data/raw/registry/game_registry.jsonl` at runtime, separate from the immutable research snapshot. If the registry does not exist, `selected_50_games.jsonl` seeds 50 `ACTIVE` entries with source `INITIAL_RESEARCH_SNAPSHOT`. Reconciliation deduplicates by AppID, preserves existing `ACTIVE` entries, creates unseen qualified games as `NEW`, queues at most the configured `max_new_games_per_cycle`, and leaves the remainder `NEW`/deferred.
+Discovery Control Plane V1 uses `data/raw/registry/game_registry.jsonl` at runtime, separate from the immutable research snapshot. If the registry does not exist, `selected_50_games.jsonl` seeds 50 `ACTIVE` entries with source `INITIAL_RESEARCH_SNAPSHOT`. Reconciliation deduplicates by AppID, preserves every existing lifecycle state, creates unseen qualified games as `NEW`, preserves outstanding `QUEUED` entries without duplicates, fills only the remaining cycle and ACTIVE-capacity slots, and leaves excess games `NEW`/deferred.
 
-`src/discovery/run_discovery.py` produces a deterministic onboarding plan, a crawler-compatible JSONL queue, and a reconciled run report. It does not start historical backfill. Production persistence, scheduling, and multi-user concurrency remain **Design-only**.
+`src/discovery/run_discovery.py` produces a deterministic onboarding plan, a crawler-compatible JSONL queue, and a reconciled run report. It does not start historical backfill directly; the scheduler delegates that phase to the existing locked, resumable onboarding workflow. A production registry service and multi-user administration remain **Design-only**.
 
 ## NEW versus ACTIVE flow
 
@@ -125,7 +197,7 @@ The configured default is three attempts with exponential backoff. The intended 
 
 The current policy is version 1. Future discovery evidence should record the policy version used. Configuration history does not require a policy database in this slice.
 
-Policy changes are non-retroactive by default. If Game A became `ACTIVE` under version 1 and version 2 raises `min_total_reviews`, Game A remains `ACTIVE`. The new policy applies to future discovery/onboarding. Re-evaluating existing `ACTIVE` games is a separate explicit **Design-only** operation.
+Policy changes are non-retroactive by default. If Game A became `ACTIVE` under version 1 and version 2 raises `min_total_reviews`, Game A remains `ACTIVE`. Catalog refresh does not demote it. The new policy applies to future discovery/onboarding. Re-evaluating existing `ACTIVE` games is a separate explicit **Design-only** operation.
 
 ## Current research snapshot
 

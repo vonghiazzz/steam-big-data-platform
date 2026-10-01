@@ -11,7 +11,8 @@ This repository implements a local big-data platform for analysing Steam games a
 - MongoDB exposes historical aggregates and realtime materialized views to a future API.
 - Matplotlib produces evidence charts from Gold Analytics.
 
-The platform currently stops at MongoDB. A Backend API, frontend dashboard, and MLlib workloads are not implemented yet.
+The platform includes batch MLlib training over Gold Base. A Backend API and
+frontend dashboard are not implemented yet.
 
 ## Current Status
 
@@ -30,7 +31,7 @@ The platform currently stops at MongoDB. A Backend API, frontend dashboard, and 
 | MongoDB Realtime Serving V2 | Implemented | Serve recent reviews and windowed realtime metrics |
 | Backend API | Not implemented — next | Read-only application interface over MongoDB |
 | Frontend dashboard | Not implemented — next | Visual and realtime consumer of the Backend API |
-| MLlib | Future | Additional modelling over Gold data |
+| MLlib V1 | Implemented | Batch recommendation classification over current Gold Base |
 
 ## Architecture
 
@@ -60,7 +61,7 @@ The platform currently stops at MongoDB. A Backend API, frontend dashboard, and 
                    |                           |       +--> MongoDB historical serving
                    |                           +----------> Visualization
                    |
-                   +--> future MLlib
+                   +--> Spark MLlib V1
 
      Bronze reviews --> Hadoop Streaming MapReduce
                               |
@@ -294,6 +295,50 @@ spark-submit --master 'local[2]' \
 
 A successful baseline preserves 50 games, 25,000 reviews, 25,000 Gold rows, and 25,000 unique recommendation IDs.
 
+### Dynamic onboarding as one resumable workflow
+
+After discovery has placed qualified games in the onboarding queue, run the
+entire guarded flow with one command:
+
+```bash
+bash scripts/run_onboarding_workflow.sh \
+  --batch-id onboarding-YYYYMMDD-NNN
+```
+
+For a new periodic cycle, let the runner refresh the discovery plan first and
+generate the batch ID automatically:
+
+```bash
+bash scripts/run_onboarding_workflow.sh --run-discovery
+```
+
+The command above reuses the current local candidate/probe snapshot. To fetch
+fresh Steam Store Search candidates before discovery, request the bounded
+catalog refresh explicitly:
+
+```bash
+bash scripts/run_onboarding_workflow.sh --run-discovery --refresh-catalog
+```
+
+Catalog Refresh V1 stages the Store Search result, metadata probes, and review
+probes before replacing the operational evidence. Its policy defaults are 50
+results per page and at most four pages; a failed later probe leaves the prior
+snapshot in place. Registry reconciliation preserves existing lifecycle states
+and outstanding `QUEUED` games. There is no discovery scheduler yet, and an
+`ACTIVE` game is not demoted or automatically re-evaluated by catalog refresh.
+
+The runner performs prepare, historical review crawl, validation, immutable
+incremental Bronze publication, Bronze verification, Silver, Gold, Analytics,
+MongoDB serving, per-game readiness checks, and finally the `QUEUED` to
+`ACTIVE` registry transition. Every phase is recorded under
+`data/onboarding/<batch-id>/workflow_state.json`. Re-running the same batch ID
+resumes completed work instead of repeating it. Registry activation occurs
+only after Bronze, Silver, Gold, and MongoDB all contain the expected data.
+
+This workflow state is also the integration contract for a future API or UI:
+the UI starts a batch through a worker and reads the same state file rather
+than directly editing registry or HDFS data.
+
 ## 5. Run Spark Analytics
 
 ```bash
@@ -515,6 +560,26 @@ An exited `availableNow` job is behaving as configured; it is not a continuous s
 
 Evidence from the validated runs is stored under `evidence/`; it is a reproducibility reference, not a substitute for verifying a new environment.
 
+## Run Spark MLlib V1
+
+MLlib V1 performs a fresh batch retraining over the current dynamic
+`/steam/gold/base`. The target is `voted_up`; models are a majority baseline,
+Logistic Regression, and Random Forest. It is not online/incremental learning.
+
+```bash
+export PYSPARK_PYTHON="$PWD/.venv/bin/python"
+export PYSPARK_DRIVER_PYTHON="$PWD/.venv/bin/python"
+
+spark-submit --master 'local[2]' \
+  --conf "spark.hadoop.fs.defaultFS=$HDFS_DEFAULT_FS" \
+  src/ml/run_mllib_v1.py
+```
+
+PipelineModels are written below `/steam/models/mllib/v1`, evaluation
+predictions below `/steam/ml/mllib/v1/test_predictions`, and reproducibility
+evidence under `evidence/ml/`. Each run records the dynamic dataset counts,
+fingerprint, split seed, parameters, metrics, and output paths.
+
 ## Troubleshooting
 
 | Symptom | Check |
@@ -538,7 +603,8 @@ Evidence from the validated runs is stored under `evidence/`; it is a reproducib
 - Realtime price, player-count, and game-metadata update events are not implemented.
 - A fresh clone lacks both a bundled Hadoop deployment and the mutable ACTIVE producer registry.
 - The Backend API and frontend dashboard are not implemented.
-- MLlib modelling remains future work.
+- MLlib V1 is batch retraining only; model serving and online learning are not
+  implemented.
 - Local continuous jobs stop when the host or their containers stop.
 - This is a reproducible local/course platform, not production deployment infrastructure.
 

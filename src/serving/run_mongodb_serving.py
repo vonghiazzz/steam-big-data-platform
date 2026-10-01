@@ -23,9 +23,6 @@ ANALYTICS_ROOT = "/steam/gold/analytics"
 ANALYTICS_PATHS = {
     name: f"{ANALYTICS_ROOT}/{name}" for name in COLLECTION_SPECS
 }
-EXPECTED_TOTAL_REVIEWS = 25_000
-EXPECTED_POSITIVES = 18_321
-EXPECTED_NEGATIVES = 6_679
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -66,17 +63,23 @@ def _validate_rate(frame: DataFrame, dataset_name: str) -> None:
         )
 
 
-def _review_total(frame: DataFrame, dataset_name: str) -> int:
+def _review_total(
+    frame: DataFrame,
+    dataset_name: str,
+    expected_total: int,
+) -> int:
     _require_columns(frame, dataset_name, ("review_count",))
     total = frame.agg(F.sum("review_count").alias("total")).first()["total"]
-    if total != EXPECTED_TOTAL_REVIEWS:
+    if total != expected_total:
         raise RuntimeError(
-            f"{dataset_name} review total {total} != {EXPECTED_TOTAL_REVIEWS}"
+            f"{dataset_name} review total {total} != {expected_total}"
         )
     return int(total)
 
 
-def validate_sources(datasets: dict[str, DataFrame]) -> dict[str, int]:
+def validate_sources(
+    datasets: dict[str, DataFrame],
+) -> tuple[dict[str, int], dict[str, int]]:
     if set(datasets) != set(COLLECTION_SPECS):
         raise RuntimeError("Gold Analytics dataset set does not match Serving V1")
 
@@ -86,12 +89,24 @@ def validate_sources(datasets: dict[str, DataFrame]) -> dict[str, int]:
         if spec.key_field:
             _require_columns(frame, name, (spec.key_field,))
         count = frame.count()
-        if count != spec.expected_count:
-            raise RuntimeError(
-                f"{name} source count {count} != {spec.expected_count}"
-            )
+        if count <= 0:
+            raise RuntimeError(f"{name} source is empty")
         counts[name] = count
         _validate_rate(frame, name)
+
+    profile = datasets["label_profile"].first()
+    profile_fields = ("total_rows", "positive_count", "negative_count")
+    _require_columns(datasets["label_profile"], "label_profile", profile_fields)
+    expected_profile = {field: int(profile[field]) for field in profile_fields}
+    expected_total = expected_profile["total_rows"]
+    if expected_total <= 0:
+        raise RuntimeError("label_profile total_rows must be positive")
+    if (
+        expected_profile["positive_count"]
+        + expected_profile["negative_count"]
+        != expected_total
+    ):
+        raise RuntimeError("label_profile labels do not reconcile to total_rows")
 
     for name in (
         "game_metrics",
@@ -99,21 +114,8 @@ def validate_sources(datasets: dict[str, DataFrame]) -> dict[str, int]:
         "free_paid_metrics",
         "purchase_metrics",
     ):
-        _review_total(datasets[name], name)
-
-    profile = datasets["label_profile"].first()
-    expected = {
-        "total_rows": EXPECTED_TOTAL_REVIEWS,
-        "positive_count": EXPECTED_POSITIVES,
-        "negative_count": EXPECTED_NEGATIVES,
-    }
-    _require_columns(datasets["label_profile"], "label_profile", expected)
-    for field, value in expected.items():
-        if profile[field] != value:
-            raise RuntimeError(
-                f"label_profile {field}={profile[field]} != {value}"
-            )
-    return counts
+        _review_total(datasets[name], name, expected_total)
+    return counts, expected_profile
 
 
 def collect_documents(
@@ -229,7 +231,7 @@ def main() -> int:
     client = None
     try:
         datasets = read_analytics(spark)
-        source_counts = validate_sources(datasets)
+        source_counts, expected_profile = validate_sources(datasets)
         documents = collect_documents(datasets)
 
         client = MongoClient(args.mongo_uri, serverSelectionTimeoutMS=5_000)
@@ -237,9 +239,17 @@ def main() -> int:
         database = client[args.database]
 
         load_all_collections(database, documents)
-        first_counts, first_totals = validate_database(database)
+        first_counts, first_totals = validate_database(
+            database,
+            expected_counts=source_counts,
+            expected_profile=expected_profile,
+        )
         load_all_collections(database, documents)
-        second_counts, totals = validate_database(database)
+        second_counts, totals = validate_database(
+            database,
+            expected_counts=source_counts,
+            expected_profile=expected_profile,
+        )
         if first_totals != totals:
             raise RuntimeError("MongoDB totals changed after the second load")
 

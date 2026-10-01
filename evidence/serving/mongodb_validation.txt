@@ -1,17 +1,17 @@
 MONGODB SERVING V1
-game_metrics=50
+game_metrics=90
 genre_metrics=17
 playtime_metrics=5
 free_paid_metrics=2
-engagement_metrics=50
+engagement_metrics=90
 label_profile=1
 platform_metrics=3
-category_metrics=59
+category_metrics=61
 purchase_metrics=2
-reviews=25000
-positive=18321
-negative=6679
-game_reviews=25000
-free_paid_reviews=25000
-purchase_reviews=25000
+reviews=45000
+positive=35863
+negative=9137
+game_reviews=45000
+free_paid_reviews=45000
+purchase_reviews=45000
 MONGODB SERVING VALIDATION: PASS

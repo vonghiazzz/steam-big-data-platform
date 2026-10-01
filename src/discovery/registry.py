@@ -105,11 +105,27 @@ class RegistryReconciliation:
 
 
 @dataclass(frozen=True)
+class OnboardingCapacity:
+    active_count: int
+    existing_queued_count: int
+    max_active_games: int
+    max_new_games_per_cycle: int
+    available_active_capacity: int
+    cycle_capacity: int
+    new_queue_capacity: int
+
+
+@dataclass(frozen=True)
 class OnboardingPlan:
     policy_version: int
     target_reviews_per_game: int
     qualified_count: int
     existing_active_count: int
+    existing_queued_count: int
+    max_active_games: int
+    available_active_capacity: int
+    cycle_capacity: int
+    new_queue_capacity: int
     new_count: int
     queued_count: int
     deferred_count: int
@@ -123,6 +139,11 @@ class OnboardingPlan:
             "target_reviews_per_game": self.target_reviews_per_game,
             "qualified_count": self.qualified_count,
             "existing_active_count": self.existing_active_count,
+            "existing_queued_count": self.existing_queued_count,
+            "max_active_games": self.max_active_games,
+            "available_active_capacity": self.available_active_capacity,
+            "cycle_capacity": self.cycle_capacity,
+            "new_queue_capacity": self.new_queue_capacity,
             "new_count": self.new_count,
             "queued_count": self.queued_count,
             "deferred_count": self.deferred_count,
@@ -239,6 +260,7 @@ def build_onboarding_plan(
     *,
     policy_version: int,
     run_timestamp: str | None = None,
+    max_active_games: int = 100,
 ) -> tuple[dict[int, RegistryEntry], OnboardingPlan]:
     candidates: dict[int, Mapping[str, Any]] = {}
     for candidate in qualified_candidates:
@@ -246,8 +268,13 @@ def build_onboarding_plan(
         candidates.setdefault(appid, candidate)
 
     pending = sorted(reconciliation.pending_new_appids)
-    queued = pending[: onboarding_policy.max_new_games_per_cycle]
-    deferred = pending[onboarding_policy.max_new_games_per_cycle :]
+    capacity = calculate_onboarding_capacity(
+        reconciliation.registry,
+        max_active_games=max_active_games,
+        max_new_games_per_cycle=onboarding_policy.max_new_games_per_cycle,
+    )
+    queued = pending[: capacity.new_queue_capacity]
+    deferred = pending[capacity.new_queue_capacity :]
 
     registry = dict(reconciliation.registry)
     for appid in queued:
@@ -272,9 +299,12 @@ def build_onboarding_plan(
         policy_version=policy_version,
         target_reviews_per_game=onboarding_policy.target_reviews_per_game,
         qualified_count=len(candidates),
-        existing_active_count=len(
-            reconciliation.existing_active_appids
-        ),
+        existing_active_count=capacity.active_count,
+        existing_queued_count=capacity.existing_queued_count,
+        max_active_games=capacity.max_active_games,
+        available_active_capacity=capacity.available_active_capacity,
+        cycle_capacity=capacity.cycle_capacity,
+        new_queue_capacity=capacity.new_queue_capacity,
         new_count=len(pending),
         queued_count=len(queued),
         deferred_count=len(deferred),
@@ -283,6 +313,74 @@ def build_onboarding_plan(
         queued_games=queued_games,
     )
     return registry, plan
+
+
+def calculate_onboarding_capacity(
+    registry: Mapping[int, RegistryEntry],
+    *,
+    max_active_games: int,
+    max_new_games_per_cycle: int,
+) -> OnboardingCapacity:
+    """Calculate bounded onboarding capacity including QUEUED reservations."""
+    if max_active_games <= 0:
+        raise ValueError("max_active_games must be positive")
+    if max_new_games_per_cycle <= 0:
+        raise ValueError("max_new_games_per_cycle must be positive")
+
+    active_count = sum(
+        entry.status == STATUS_ACTIVE for entry in registry.values()
+    )
+    existing_queued_count = sum(
+        entry.status == STATUS_QUEUED for entry in registry.values()
+    )
+    available_active_capacity = max(0, max_active_games - active_count)
+    cycle_capacity = min(
+        max_new_games_per_cycle,
+        available_active_capacity,
+    )
+    new_queue_capacity = max(0, cycle_capacity - existing_queued_count)
+    return OnboardingCapacity(
+        active_count=active_count,
+        existing_queued_count=existing_queued_count,
+        max_active_games=max_active_games,
+        max_new_games_per_cycle=max_new_games_per_cycle,
+        available_active_capacity=available_active_capacity,
+        cycle_capacity=cycle_capacity,
+        new_queue_capacity=new_queue_capacity,
+    )
+
+
+def reconcile_onboarding_queue(
+    existing_rows: Iterable[Mapping[str, Any]],
+    registry: Mapping[int, RegistryEntry],
+    onboarding_policy: OnboardingPolicy,
+) -> tuple[dict[str, Any], ...]:
+    """Materialize every outstanding QUEUED registry entry exactly once."""
+    existing_by_appid: dict[int, dict[str, Any]] = {}
+    for row in existing_rows:
+        appid = _positive_appid(row.get("appid"))
+        existing_by_appid.setdefault(appid, dict(row))
+
+    reconciled: list[dict[str, Any]] = []
+    for appid in sorted(registry):
+        entry = registry[appid]
+        if entry.status != STATUS_QUEUED:
+            continue
+        row = existing_by_appid.get(appid, {})
+        name = _optional_string(row.get("name")) or entry.name
+        if not name:
+            raise ValueError(f"QUEUED registry appid {appid} has no game name")
+        reconciled.append(
+            {
+                **row,
+                "appid": appid,
+                "name": name,
+                "target_reviews": onboarding_policy.target_reviews_per_game,
+                "policy_version": entry.policy_version,
+                "source": entry.source,
+            }
+        )
+    return tuple(reconciled)
 
 
 def _positive_appid(value: Any) -> int:
