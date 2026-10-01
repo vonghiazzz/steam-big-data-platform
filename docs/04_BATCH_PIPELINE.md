@@ -1,57 +1,324 @@
 # Batch Pipeline
 
-## Scope and status
+## Purpose
 
-The canonical historical batch path is implemented and validated through HDFS Bronze, Silver, and Gold for 50 games and 25,000 reviews.
+The batch pipeline builds the historical analytical dataset from Steam source
+data.
 
-## Historical backfill
-
-For the current experiment, `selected_50_games.jsonl` drives game-metadata preparation and review crawling. The crawler preserves source-near records by game and retains raw API pages for replay/debugging. Landing validation checks expected games, counts, identifiers, language, labels, and duplicates. Bronze-ready finalization produces a reproducible 50-game × 500-review handoff before HDFS upload.
-
-In the scalable design, the same historical path applies only to each qualified `NEW` registry entry:
+Main flow:
 
 ```text
-NEW game
--> Python historical backfill
--> raw Steam API records
--> Ingestion Integrity Validation
--> HDFS Bronze
--> verification/reconciliation
--> mark ACTIVE
+Steam Historical Data
+
+        |
+
+Historical Ingestion
+
+        |
+
+HDFS Bronze
+
+        |
+
+PySpark Silver
+
+        |
+
+Historical Gold
+
+        |
+
+Analytics / ML Snapshot
 ```
 
-Ingestion Integrity Validation checks transport and structural integrity such as readable responses, parseable JSON, expected AppIDs, files, completeness, counts, and supported checksums. Historical records are not analytically cleaned before Bronze. Outlier handling, normalization, feature engineering, aggregation, and ML filtering belong after Bronze.
+The batch pipeline provides reproducible historical processing.
 
-An existing `ACTIVE` game is handled by incremental polling and must not receive another full historical crawl during each weekly discovery cycle. A deliberate repair or rebuild is a separate auditable operation.
+---
 
-## Bronze to Silver — next checkpoint
+# Historical Ingestion
 
-`src/batch/bronze_to_silver.py` is not yet implemented. Its required responsibilities are:
+Historical ingestion prepares source data for analytical processing.
 
-1. Read Bronze game and review JSON/JSONL from HDFS.
-2. Apply explicit PySpark schemas rather than schema inference alone.
-3. Validate required keys and source relationships.
-4. Convert booleans, numerics, arrays, and timestamps to stable types.
-5. Deduplicate reviews by `recommendationid` using a documented rule.
-6. Normalize game metadata structures needed for joins and analytics.
-7. Write partitioned/organized Silver Parquet to HDFS.
-8. Produce Bronze-versus-Silver reconciliation: inputs, accepted rows, rejected rows, duplicates, and output counts.
+Sources:
 
-The pipeline should fail clearly on broken contracts and keep rejected-record evidence instead of silently dropping data.
+```text
+Steam API
 
-## Silver to Gold — planned
+    |
 
-Silver reviews will join game metadata on `appid`. Planned Gold outputs include game-level summaries, genre analytics, behavior features, and a versioned ML-ready table. Derived fields may include `playtime_hours`, recommendation label, price buckets, and playtime buckets.
+Raw Records
 
-## Rebuild and reprocessing
+    |
 
-Batch processing remains necessary even with a streaming path. Replay from immutable Bronze supports:
+HDFS Bronze
+```
 
-- new or corrected schemas
-- updated cleaning/deduplication rules
-- recovery from corrupted Silver/Gold output
-- historical onboarding of a newly qualified game
-- backfilling features introduced after the original crawl
-- reproducible rebuilds for a named research snapshot
+The same flow is reused when onboarding qualified NEW games.
 
-Reprocessing should write to a new version or controlled replacement path and record the rule/schema version used.
+---
+
+# Bronze Layer
+
+Purpose:
+
+```text
+Raw replayable storage
+```
+
+Path:
+
+```text
+/steam/bronze
+```
+
+Contains:
+
+- Raw game metadata.
+- Historical reviews.
+- Source records.
+- Ingestion evidence.
+
+Responsibilities:
+
+- Preserve original data.
+- Support replay.
+- Support auditing.
+
+Bronze does not perform analytical transformations.
+
+---
+
+# Silver Layer
+
+Purpose:
+
+```text
+Cleaned and validated datasets
+```
+
+Path:
+
+```text
+/steam/silver
+```
+
+Responsibilities:
+
+- Apply schemas.
+- Normalize types.
+- Validate fields.
+- Remove duplicates.
+- Produce analytical-ready records.
+
+Review key:
+
+```text
+recommendationid
+```
+
+Silver provides the data contract consumed by Gold.
+
+---
+
+# Historical Gold Layer
+
+Purpose:
+
+```text
+Review-level analytical dataset
+```
+
+Path:
+
+```text
+/steam/gold/base
+```
+
+Properties:
+
+- One row per `recommendationid`.
+- Joined review and game information.
+- Ready for analytics and ML experiments.
+
+Historical Gold is not modified by realtime processing.
+
+---
+
+# Incremental Gold Relationship
+
+Realtime processing creates separate incremental outputs.
+
+Path:
+
+```text
+/steam/gold/base_incremental_v1
+```
+
+Historical and incremental data are combined later by Current Gold refresh.
+
+Flow:
+
+```text
+Historical Gold
+
+        +
+
+Incremental Gold
+
+        |
+
+        v
+
+Current Gold
+```
+
+---
+
+# Current Gold Refresh
+
+Current Gold creates the latest operational snapshot.
+
+Flow:
+
+```text
+Historical Gold
+
+        +
+
+Incremental Gold
+
+        |
+
+        v
+
+Current Gold
+
+        |
+
+        +----------------+
+        |                |
+
+        v                v
+
+Current Analytics     MLlib
+```
+
+Command:
+
+```bash
+bash scripts/run_current_refresh.sh --run-once
+```
+
+Batch processing itself does not trigger ML directly.
+
+---
+
+# Validation
+
+Each batch stage validates its output.
+
+## Bronze Validation
+
+Checks:
+
+- Source readability.
+- Record structure.
+- Required identifiers.
+
+---
+
+## Silver Validation
+
+Checks:
+
+- Schema correctness.
+- Required fields.
+- Duplicate handling.
+- Row reconciliation.
+
+---
+
+## Gold Validation
+
+Checks:
+
+- Review grain.
+- Unique recommendation IDs.
+- Feature completeness.
+- Analytical consistency.
+
+---
+
+# Rebuild Strategy
+
+The pipeline supports controlled rebuilds.
+
+Examples:
+
+```text
+Bronze
+
+ |
+
+Silver rebuild
+
+ |
+
+Gold rebuild
+
+ |
+
+Current Gold rebuild
+
+ |
+
+Analytics refresh
+```
+
+Rebuild principles:
+
+- Keep Bronze immutable.
+- Record validation evidence.
+- Preserve deterministic outputs.
+
+---
+
+# Pipeline Responsibilities
+
+Batch processing owns:
+
+```text
+Historical ingestion
+
+        |
+
+Bronze
+
+        |
+
+Silver
+
+        |
+
+Historical Gold
+
+        |
+
+Historical snapshots
+```
+
+Streaming processing owns:
+
+```text
+New review events
+
+        |
+
+Incremental datasets
+
+        |
+
+Current Gold refresh
+```
+
+Both pipelines share compatible data contracts.

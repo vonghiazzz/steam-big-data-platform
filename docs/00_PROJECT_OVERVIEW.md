@@ -1,61 +1,232 @@
 # Project Overview
 
-## Goal and research question
+## Goal
 
-This BDA501 final project builds a reproducible Big Data workflow for Steam game and player-behavior analytics. The main research question is:
+This BDA501 final project builds a reproducible Big Data platform for Steam
+game and review analytics.
 
-> Can player behavior and game characteristics be used to predict whether a Steam user recommends a game?
+The main research question:
 
-The primary prediction target is `voted_up`. The primary model intentionally excludes review text and focuses on behavioral and game-metadata features.
+> Can player behavior and game characteristics be used to predict whether a
+> Steam user recommends a game?
 
-## Current research snapshot
-
-The implemented experiment uses a versioned, fixed cohort:
-
-- 50 selected games in `data/raw/steam/selected_50_games.jsonl`
-- 25,000 reviews, with 500 reviews per selected game
-- 18,321 positive and 6,679 negative `voted_up` labels
-- raw game metadata, review records, and retained API-page evidence
-
-This snapshot supports reproducible EDA, ML, and MapReduce-versus-Spark validation. It is not a permanent system limit. The scalable design maintains a Game Registry / Watchlist so future discovery cycles can onboard additional games.
-
-## Status
-
-| Area | Status | Current evidence or intent |
-|---|---|---|
-| Catalog discovery and qualification | **Implemented** | Steam candidates, probes, versioned policy configuration, explainable evaluator |
-| Discovery Control Plane V1 | **Implemented** | Local JSONL registry, reconciliation, onboarding plan, run report |
-| Initial game selection | **Implemented** | Fixed 50-game research cohort |
-| Historical ingestion | **Implemented** | Review crawler and game-metadata preparation |
-| Landing and bronze-ready validation | **Implemented** | Validation and finalization scripts with reconciliation |
-| HDFS Bronze upload and verification | **Implemented** | Raw selected-scope data verified under HDFS Bronze |
-| PySpark Bronze-to-Silver | **Implemented and validated** | Canonical 50-game / 25,000-review batch baseline |
-| Silver-to-Gold | **Implemented and validated** | Canonical Gold Base contains 25,000 rows |
-| MapReduce, Spark SQL / EDA | **Planned** | Designs documented in this folder |
-| Production registry automation | **Design-only** | Local V1 exists; database service and scheduler are not implemented |
-| Kafka and Structured Streaming | **V1 implemented / runtime smoke pending** | `REVIEW_CREATED` only; bounded producer/Spark fixture tests pass |
-| Spark MLlib and MongoDB serving | **Planned** | Depend on validated Silver/Gold datasets |
-
-## Big Data platform
-
-- **Steam API and catalog pages:** source data
-- **Python:** discovery, qualification, historical backfill, validation
-- **HDFS:** authoritative Bronze, Silver, and Gold data lake
-- **PySpark:** schema enforcement, cleansing, deduplication, joins, and Parquet output
-- **MapReduce:** independent game-level aggregation validated against Spark
-- **Kafka and Structured Streaming:** planned incremental event transport and processing
-- **Spark SQL / MLlib:** planned analytics and recommendation prediction
-- **MongoDB:** planned serving collections for summaries and predictions
-
-Local `data/raw/` directories are crawl/staging/backup areas, not the authoritative data lake.
-
-## Immediate next checkpoint
+Prediction target:
 
 ```text
-HDFS Bronze
--> PySpark Bronze-to-Silver
--> Silver validation
--> Gold base
+voted_up
 ```
 
-The exact next engineering action is to implement and validate `src/batch/bronze_to_silver.py` with explicit schemas, validation, deduplication, type conversion, Silver Parquet output in HDFS, and Bronze-versus-Silver reconciliation.
+The ML pipeline uses behavioral and game metadata features.
+Review text is outside the primary experiment.
+
+---
+
+# System Summary
+
+The platform contains four major areas:
+
+```text
+Data Ingestion
+
+        |
+
+Data Lake Processing
+
+        |
+
+Analytics and Machine Learning
+
+        |
+
+Serving Layer
+```
+
+Main technologies:
+
+| Component | Purpose |
+|---|---|
+| HDFS | Authoritative data lake storage |
+| PySpark | Batch processing, cleaning, analytics |
+| Kafka | Realtime event transport |
+| Structured Streaming | Incremental review processing |
+| Hadoop MapReduce | Independent Spark validation |
+| MongoDB | Serving/materialized views |
+| Spark MLlib | Recommendation classification |
+
+---
+
+# Current Status
+
+| Area | Status |
+|---|---|
+| Historical ingestion | Implemented |
+| HDFS Bronze/Silver/Gold | Implemented |
+| Game Discovery Control Plane | Implemented |
+| Dynamic game onboarding | Implemented |
+| Kafka review streaming | Implemented |
+| Spark Structured Streaming | Implemented |
+| MongoDB Historical Serving | Implemented |
+| MongoDB Realtime Serving | Implemented |
+| Spark Analytics | Implemented |
+| Current Gold refresh | Implemented |
+| Current Analytics refresh | Implemented |
+| MLlib V1 | Implemented |
+| Current Refresh Scheduler | Implemented |
+| Backend API | Not implemented |
+| Frontend dashboard | Not implemented |
+
+---
+
+# Dataset Snapshot
+
+The original research snapshot:
+
+```text
+50 games
+
+25,000 historical reviews
+
+18,321 positive reviews
+
+6,679 negative reviews
+```
+
+This snapshot provides reproducible historical validation.
+
+It is not a permanent system limitation.
+
+The scalable system supports future game onboarding through the Discovery
+Control Plane.
+
+---
+
+# Main Data Paths
+
+Historical data:
+
+```text
+Steam API
+
+    |
+
+HDFS Bronze
+
+    |
+
+Silver
+
+    |
+
+Historical Gold
+```
+
+Realtime data:
+
+```text
+ACTIVE Games
+
+    |
+
+Steam Review Polling
+
+    |
+
+Kafka
+
+    |
+
+Structured Streaming
+
+    |
+
+Incremental Gold
+```
+
+The two paths converge into:
+
+```text
+Current Gold
+```
+
+which is used by:
+
+- Current Analytics
+- MLlib training
+
+---
+
+# Automation
+
+The platform contains two independent automation flows.
+
+## Discovery Scheduler
+
+Purpose:
+
+```text
+Discover and onboard games
+```
+
+Command:
+
+```bash
+bash scripts/run_discovery_scheduler.sh
+```
+
+---
+
+## Current Refresh Scheduler
+
+Purpose:
+
+```text
+Refresh Current Gold
+
+        |
+
+Refresh Analytics
+
+        |
+
+Conditional ML Retraining
+```
+
+Command:
+
+```bash
+bash scripts/run_current_refresh.sh
+```
+
+---
+
+# Current Limitations
+
+The following application layers are not implemented:
+
+- Backend API.
+- Frontend dashboard.
+- Model serving API.
+
+The current repository focuses on the Big Data processing platform and
+reproducible analytics workflow.
+
+---
+
+# Next Development Step
+
+The next application boundary is:
+
+```text
+Frontend
+
+    |
+
+Backend API
+
+    |
+
+MongoDB Serving Layer
+```
+
+The API should consume prepared MongoDB views instead of querying HDFS or
+executing Spark jobs directly.

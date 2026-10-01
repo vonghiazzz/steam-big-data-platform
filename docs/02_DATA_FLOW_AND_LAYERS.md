@@ -1,76 +1,390 @@
 # Data Flow and Lake Layers
 
-## Local staging flow
+## Overview
 
-The implemented local flow is:
-
-```text
-Steam API
--> data/raw/steam/landing
--> landing validation
--> data/raw/steam/bronze_ready
-```
-
-`landing/` contains crawler output and restart/debug evidence. `bronze_ready/` is a validated, selected-scope handoff prepared for HDFS upload. These local folders are staging, crawl, and backup locations. They are not the authoritative Bronze/Silver/Gold lake.
-
-## Authoritative HDFS flow
+The platform follows a medallion-style data architecture:
 
 ```text
-local bronze_ready
--> HDFS Bronze
--> PySpark Bronze-to-Silver
--> HDFS Silver (Parquet)
--> PySpark Silver-to-Gold
--> HDFS Gold
+Raw Sources
+
+    |
+
+    v
+
+Bronze
+
+    |
+
+    v
+
+Silver
+
+    |
+
+    v
+
+Gold
+
+    |
+
+    +----------------+
+    |                |
+    v                v
+
+Analytics          MLlib
 ```
 
-The configured lake roots are:
+Historical and realtime pipelines use compatible data contracts and converge at
+Current Gold.
 
-- Bronze: `/steam/bronze`
-- Silver: `/steam/silver`
-- Gold: `/steam/gold`
+---
 
-Canonical Bronze upload/verification, Bronze-to-Silver, and Silver-to-Gold are implemented and validated. Streaming V1 writes new reviews to separate incremental Silver/Gold paths.
+# Data Storage Layers
 
-## Data contracts
+## Bronze
 
-### Bronze — raw selected-scope data
+Purpose:
 
-Bronze preserves immutable, replayable records for the managed scope:
+```text
+Raw replayable storage
+```
 
-- raw Steam game metadata
-- historical review records
-- retained raw review API pages
-- planned raw events under a `stream_events` area
-- source identifiers and ingestion context needed for replay/audit
+Path:
 
-Selecting or managing scope before ingestion does not make Bronze “clean.” Bronze applies no analytical transformation and must not be described as Silver-like curated data.
+```text
+/steam/bronze
+```
 
-### Silver — cleaned and typed records
+Contains:
 
-Silver applies an explicit schema and produces validated Parquet datasets. Its contract includes:
+- Raw Steam game metadata.
+- Raw historical reviews.
+- Streaming event archives.
 
-- typed identifiers, booleans, numerics, and timestamps
-- required-key validation for `appid` and `recommendationid`
-- duplicate handling, primarily by `recommendationid` for reviews
-- normalized game metadata fields such as genres/platforms/categories
-- auditable rejected/invalid counts
-- row-count and key reconciliation against Bronze
+Properties:
 
-Batch and streaming data must converge on compatible Silver contracts.
+- Immutable.
+- Replayable.
+- Minimal transformation.
 
-### Gold — analytics and ML-ready data
+Bronze is not analytical data.
 
-Gold contains purpose-built outputs rather than raw records:
+---
 
-- game- and genre-level aggregates
-- analytical tables for Spark SQL and visualization
-- joined review/game feature tables
-- versioned ML-ready datasets and prediction outputs
-- batch results plus planned incremental updates
+# Silver
 
-Gold datasets should retain lineage to the Silver snapshot or streaming batch that produced them.
+Purpose:
 
-## Validation boundaries
+```text
+Validated and cleaned datasets
+```
 
-Each transition records input/output counts, duplicate counts, rejected records, schema results, and relevant keys. Bronze remains replayable; a changed rule should rebuild Silver/Gold without rewriting raw source history.
+Path:
+
+```text
+/steam/silver
+```
+
+Responsibilities:
+
+- Apply explicit schemas.
+- Normalize data types.
+- Validate required fields.
+- Remove duplicates.
+- Preserve rejected records.
+
+Review primary key:
+
+```text
+recommendationid
+```
+
+Silver provides the contract used by Gold processing.
+
+---
+
+# Gold
+
+Gold contains analytical-ready datasets.
+
+There are two main Gold paths.
+
+---
+
+## Historical Gold
+
+Path:
+
+```text
+/steam/gold/base
+```
+
+Purpose:
+
+- Historical analytics.
+- Baseline experiments.
+- Reproducible snapshots.
+
+Grain:
+
+```text
+1 row = 1 recommendationid
+```
+
+---
+
+## Incremental Gold
+
+Path:
+
+```text
+/steam/gold/base_incremental_v1
+```
+
+Purpose:
+
+- Store newly observed realtime reviews.
+- Preserve streaming output separately.
+
+Incremental Gold does not overwrite Historical Gold.
+
+---
+
+# Current Gold
+
+Current Gold is the unified operational snapshot.
+
+Flow:
+
+```text
+Historical Gold
+
+        +
+
+Incremental Gold
+
+        |
+
+        v
+
+Current Gold
+```
+
+Path:
+
+```text
+/steam/gold/base_current_v1
+```
+
+Properties:
+
+- Same schema contract as Gold.
+- One row per `recommendationid`.
+- Deduplicated before writing.
+- Used by Analytics and MLlib.
+
+Current Gold allows the platform to use the latest validated data without
+changing historical or incremental sources.
+
+---
+
+# Analytics Layer
+
+Analytics consumes Gold datasets.
+
+## Historical Analytics
+
+Input:
+
+```text
+/steam/gold/base
+```
+
+Output:
+
+```text
+/steam/gold/analytics/<dataset>
+```
+
+Purpose:
+
+- Historical reporting.
+- Baseline visualization.
+- Historical serving.
+
+---
+
+## Current Analytics
+
+Input:
+
+```text
+/steam/gold/base_current_v1
+```
+
+Output:
+
+```text
+/steam/gold/analytics_current_v1/<dataset>
+```
+
+Purpose:
+
+- Latest reporting.
+- Current dashboard data.
+- Current monitoring.
+
+---
+
+# ML Data Flow
+
+MLlib consumes Current Gold.
+
+Flow:
+
+```text
+Current Gold
+
+      |
+
+Feature Preparation
+
+      |
+
+Training Dataset
+
+      |
+
+Model Training
+
+      |
+
+Versioned Output
+```
+
+Input:
+
+```text
+/steam/gold/base_current_v1
+```
+
+Output:
+
+```text
+/steam/models/mllib/v1/<run_id>
+```
+
+---
+
+# Realtime Data Flow
+
+Realtime reviews enter through Streaming.
+
+```text
+ACTIVE Game
+
+      |
+
+Steam Polling
+
+      |
+
+Kafka
+
+      |
+
+Structured Streaming
+
+      |
+
+Incremental Silver
+
+      |
+
+Incremental Gold
+
+      |
+
+Current Gold Refresh
+```
+
+Realtime processing does not modify Historical Gold.
+
+---
+
+# Validation Boundaries
+
+Each layer validates its own contract.
+
+## Bronze Validation
+
+Checks:
+
+- Source readability.
+- Record structure.
+- Required identifiers.
+
+---
+
+## Silver Validation
+
+Checks:
+
+- Schema compatibility.
+- Required fields.
+- Duplicate handling.
+- Data types.
+
+---
+
+## Gold Validation
+
+Checks:
+
+- Review grain.
+- Unique recommendation IDs.
+- Feature completeness.
+- Analytical consistency.
+
+---
+
+## Current Gold Validation
+
+Checks:
+
+- Historical + incremental compatibility.
+- Deduplication.
+- Final row count.
+- Unique recommendation IDs.
+
+---
+
+# Rebuild Strategy
+
+The platform supports controlled rebuilds.
+
+Examples:
+
+```text
+Bronze
+
+ |
+
+Silver rebuild
+
+ |
+
+Gold rebuild
+
+ |
+
+Current Gold rebuild
+
+ |
+
+Analytics / ML refresh
+```
+
+Bronze remains unchanged during rebuilds.
+
+This allows reproducible processing from authoritative source data.

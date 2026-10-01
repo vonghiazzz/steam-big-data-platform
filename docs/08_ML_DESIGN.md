@@ -1,79 +1,368 @@
 # Machine Learning Design
 
-## Status and objective
+## Status and Objective
 
-Spark MLlib V1 is **implemented and runtime validated**. The binary target is
-`voted_up` (`1` recommend, `0` not recommend). Each run is a fresh batch
-retraining over the current dynamic `/steam/gold/base`; it is not online model
-learning.
+Spark MLlib V1 is implemented and runtime validated.
 
-The primary model does not use review text, so NLP is outside the primary experiment.
+The objective is binary classification:
 
-## Features
+```text
+voted_up
+```
 
-### Player behavior
+Labels:
 
-- `log1p(playtime_at_review)`
+```text
+1 = recommended
+
+0 = not recommended
+```
+
+The model predicts recommendation behavior from:
+
+- Player behavior features.
+- Game metadata features.
+
+Review text is not used in the primary model.
+
+---
+
+# ML Data Source
+
+MLlib uses the operational Current Gold snapshot:
+
+```text
+/steam/gold/base_current_v1
+```
+
+Current Gold combines:
+
+```text
+Historical Gold
+
+        +
+
+Incremental Gold
+
+        |
+
+        v
+
+Current Gold
+```
+
+The dataset is validated before training.
+
+Required properties:
+
+- One row per `recommendationid`.
+- Stable schema.
+- Valid binary target.
+- Reproducible snapshot.
+
+---
+
+# ML Workflow
+
+The training pipeline:
+
+```text
+Current Gold
+
+      |
+
+Dataset Validation
+
+      |
+
+Feature Preparation
+
+      |
+
+Train/Test Split
+
+      |
+
+Model Training
+
+      |
+
+Evaluation
+
+      |
+
+Versioned Output
+```
+
+Each run records:
+
+- UTC run ID.
+- Dataset fingerprint.
+- Input path.
+- Feature contract.
+- Split information.
+- Metrics.
+- Model output paths.
+
+---
+
+# Feature Design
+
+## Player Behavior Features
+
+Examples:
+
+- `playtime_at_review`
 - `steam_purchase`
 - `received_for_free`
 
-### Game metadata
+---
+
+## Game Metadata Features
+
+Examples:
 
 - `is_free`
-- `log1p(price)` derived from crawl-time game metadata
+- `price`
 - `genres`
-- `platforms`
 - `categories`
+- `platforms`
 
-Genres and categories use binary `CountVectorizer`; platforms use explicit
-Windows/macOS/Linux flags. Imputation and vocabularies are fitted on training
-data only. `playtime_forever` is excluded from the primary model because it may
-contain information observed after review creation.
+---
 
-## Models and evaluation
+## Feature Processing
 
-The majority-class baseline and two trained models provide complementary
-comparisons:
+Categorical features:
 
-- **Logistic Regression:** interpretable linear baseline
-- **Random Forest:** nonlinear interactions and feature importance
+```text
+genres
+categories
+```
 
-Report at least:
+are transformed using vectorization.
 
-- Accuracy
-- Precision
-- Recall
-- F1
-- ROC-AUC
-- PR-AUC
-- Confusion Matrix
+Platform fields are converted into explicit boolean features.
 
-Metrics must be interpreted with class balance. Model comparison should use the same train/test split, seed, feature contract, and dataset snapshot.
+Nullable values are handled during the training pipeline.
 
-## Leakage controls
+---
 
-Features must be available at the intended prediction time. Potential leakage includes:
+# Leakage Prevention
 
-- `votes_up` or `weighted_vote_score` accumulated after the review/target exists
-- updated playtime measured long after `playtime_at_review`
-- aggregates that include the row being predicted
-- target-derived game recommendation rates
-- random row splits that let the same user/game context leak across partitions of an evaluation design
+Features must represent information available at prediction time.
 
-The experiment should document the prediction scenario before accepting a feature. Where appropriate, use temporal or grouped splits and compare them with a simple seeded baseline split.
+Excluded examples:
 
-## Dynamic snapshot reproducibility
+- Post-review accumulated metrics.
+- Target-derived recommendation rates.
+- Aggregates containing the prediction row.
+- Future information.
 
-Gold Base grows through onboarding, so counts are integrity observations rather
-than fixed acceptance constants. Each run records a UTC run ID, input path,
-game/review/label counts, deterministic dataset fingerprint, split seed,
-feature contract, class weights, model parameters, metrics, and output paths.
-Evidence is stored under `evidence/ml/`; PipelineModels are saved under
-`/steam/models/mllib/v1`.
+The feature contract is recorded for every ML run.
 
-## Model persistence
+---
 
-Each V1 run currently overwrites
-`/steam/models/mllib/v1/logistic_regression` and
-`/steam/models/mllib/v1/random_forest`. Model versioning, retention, comparison,
-and promotion are future work and are intentionally outside MLlib V1.
+# Models
+
+MLlib V1 compares:
+
+## Majority Baseline
+
+Purpose:
+
+```text
+Compare against class imbalance baseline
+```
+
+---
+
+## Logistic Regression
+
+Purpose:
+
+```text
+Interpretable linear model
+```
+
+---
+
+## Random Forest
+
+Purpose:
+
+```text
+Nonlinear model and feature importance analysis
+```
+
+---
+
+# Evaluation Metrics
+
+Each run records:
+
+- Accuracy.
+- Precision.
+- Recall.
+- F1-score.
+- ROC-AUC.
+- PR-AUC.
+- Confusion Matrix.
+
+Metrics must be interpreted together with class balance.
+
+A higher accuracy alone does not guarantee better classification when the
+dataset is imbalanced.
+
+---
+
+# Retraining Automation
+
+ML retraining is controlled by Current Refresh Scheduler.
+
+Flow:
+
+```text
+Current Gold Refresh
+
+        |
+
+Current Analytics Refresh
+
+        |
+
+Retrain Policy
+
+        |
+
+        +----------------+
+        |                |
+
+        v                v
+
+     Skip ML          Retrain ML
+```
+
+Current policy:
+
+```text
+Minimum new rows:
+1000
+
+Maximum model age:
+7 days
+```
+
+The scheduler avoids unnecessary retraining when the dataset has not changed
+enough.
+
+---
+
+# Model Versioning
+
+Every successful training run receives:
+
+```text
+run_id
+```
+
+Example:
+
+```text
+20261001T165508Z
+```
+
+Models:
+
+```text
+/steam/models/mllib/v1/<run_id>/
+```
+
+Contains:
+
+```text
+logistic_regression
+
+random_forest
+```
+
+---
+
+# Prediction Outputs
+
+Prediction results:
+
+```text
+/steam/ml/mllib/v1/test_predictions/<run_id>/
+```
+
+Each prediction stores:
+
+- recommendationid
+- label
+- prediction
+- probability
+- model name
+
+---
+
+# Evidence and Reproducibility
+
+Evidence:
+
+```text
+evidence/ml/runs/<run_id>/
+```
+
+Contains:
+
+- dataset profile
+- split profile
+- feature contract
+- metrics
+- confusion matrix
+- feature importance
+- training summary
+
+The evidence allows the exact training run to be reproduced and reviewed.
+
+---
+
+# Running ML Manually
+
+Preferred operational flow:
+
+```bash
+bash scripts/run_current_refresh.sh --run-once
+```
+
+For direct execution:
+
+```bash
+export ML_INPUT_PATH="/steam/gold/base_current_v1"
+
+spark-submit \
+  --master 'local[2]' \
+  src/ml/run_mllib_v1.py
+```
+
+---
+
+# Current Limitations
+
+- MLlib V1 is batch retraining only.
+- No online learning.
+- No model serving API.
+- No automatic model promotion.
+- No A/B testing.
+
+---
+
+# Future Extensions
+
+Possible future improvements:
+
+- Model registry.
+- Automatic model comparison.
+- Prediction serving API.
+- Feature store.
+- Online inference pipeline.

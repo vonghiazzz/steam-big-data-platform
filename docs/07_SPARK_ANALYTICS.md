@@ -1,163 +1,352 @@
 # Spark Analytics Design
 
-## Status and input
+## Purpose
 
-Spark SQL / EDA is **Planned** and begins only after Silver validation and a Gold base are available. EDA consumes curated datasets; it does not repeat raw ingestion cleaning.
+Spark Analytics generates analytical datasets from Gold data.
 
-## Planned analytical questions
+Responsibilities:
 
-1. **Recommendation rate by game and genre**
-   - review count, positive count, recommendation rate
-   - minimum-support thresholds so tiny groups are not overinterpreted
-2. **Playtime versus recommendation**
-   - compare recommendation rate across documented playtime buckets
-   - inspect skew/outliers rather than assuming a linear relationship
-3. **Free versus paid games**
-   - compare volume, engagement, playtime, and recommendation rate
-   - preserve price/snapshot context for interpretation
-4. **Top games and engagement**
-   - review volume, average playtime, votes, and weighted engagement indicators
-   - distinguish popularity from recommendation quality
-5. **Data and label profiling**
-   - class balance, missing metadata, duplicate/key rates, and feature distributions
+- Reporting.
+- Visualization.
+- MongoDB serving.
+- Current data monitoring.
 
-## Required Gold Fields
+Spark Analytics does not perform:
 
-Analytics cần Gold Base giữ tối thiểu:
+- Raw ingestion.
+- Data cleaning.
+- Streaming event processing.
 
-### Game metadata
-- appid
-- name
-- genres
-- categories
-- is_free
-- price
-- platforms
-- release_date
+---
 
-### Review / behavior
-- recommendationid
-- voted_up
-- playtime_at_review
-- playtime_forever
-- steam_purchase
-- received_for_free
-- timestamp_created
+# Analytics Input
 
-### Engagement
-- votes_up
-- votes_funny
-- weighted_vote_score
+Spark Analytics supports two Gold sources.
 
-### Derived fields
-- recommendation_label
-- playtime_hours
-- playtime_bucket
-- price_bucket
+---
 
-Gold Base grain:
+## Historical Analytics
 
-1 row = 1 Steam review
+Input:
 
-Primary review key:
+```text
+/steam/gold/base
+```
 
+Purpose:
+
+- Historical reporting.
+- Baseline analysis.
+- Reproducible experiments.
+
+---
+
+## Current Analytics
+
+Input:
+
+```text
+/steam/gold/base_current_v1
+```
+
+Purpose:
+
+- Latest unified analytical snapshot.
+- Current reporting.
+- Operational monitoring.
+
+Output:
+
+```text
+/steam/gold/analytics_current_v1/
+```
+
+Refresh:
+
+```bash
+bash scripts/run_current_refresh.sh
+```
+
+---
+
+# Gold Contract
+
+Analytics expects Gold data with:
+
+Grain:
+
+```text
+1 row = 1 recommendationid
+```
+
+Primary key:
+
+```text
 recommendationid
+```
 
-Join:
+Required relationship:
 
+```text
 reviews.appid = games.appid
+```
 
-Genre and other array-valued metadata require a documented explode/normalization rule so one review/game does not accidentally inflate counts.
+---
 
-## Expected Analytics Outputs
+# Analytical Outputs
 
-### Q1 — Recommendation rate by game and genre
+The system generates nine datasets.
 
-Output:
-- game / genre
+---
+
+## Game Metrics
+
+Purpose:
+
+```text
+Recommendation performance by game
+```
+
+Contains:
+
+- appid
+- game_name
 - review_count
-- positive_count
+- positive_reviews
+- negative_reviews
 - recommendation_rate
-- average_playtime
 
-### Q2 — Playtime versus recommendation
+---
 
-Output:
+## Genre Metrics
+
+Purpose:
+
+```text
+Recommendation trends by genre
+```
+
+Contains:
+
+- genre
+- review_count
+- positive_reviews
+- recommendation_rate
+
+---
+
+## Playtime Metrics
+
+Purpose:
+
+```text
+Relationship between playtime and recommendation
+```
+
+Contains:
+
 - playtime_bucket
 - review_count
-- positive_count
 - recommendation_rate
 
-Playtime buckets:
-- 0–2 hours
-- 2–10 hours
-- 10–50 hours
-- 50+ hours
+---
 
-### Q3 — Free versus paid games
+## Free/Paid Metrics
 
-Output:
-- is_free
+Purpose:
+
+```text
+Compare free and paid games
+```
+
+Contains:
+
+- game_type
 - game_count
 - review_count
-- average_playtime
 - recommendation_rate
- 
-### Q4 — Top games and engagement
 
-Output:
-- appid
-- name
-- review_count
-- average_playtime
-- recommendation_rate
-- votes / engagement metrics
+---
 
-### Q5 — Data and label profiling
+## Engagement Metrics
 
-Output:
-- voted_up class balance
-- missing/null counts
-- duplicate recommendationid count
-- invalid/missing appid count
-- feature distributions
-- playtime skew/outliers
+Purpose:
 
+```text
+Game engagement analysis
+```
 
-## Evidence Outputs
+Contains:
 
-Q1:
-- evidence/analytics/game_metrics.parquet
-- evidence/analytics/genre_metrics.parquet
+- review volume
+- playtime
+- votes
+- recommendation metrics
 
-Q2:
-- evidence/analytics/playtime_buckets.csv
+---
 
-Q3:
-- evidence/analytics/free_paid_metrics.csv
+## Label Profile
 
-Q4:
-- evidence/analytics/top_games_engagement.csv
+Purpose:
 
-Q5:
-- evidence/analytics/data_label_profile.txt
+```text
+ML target distribution
+```
 
-Spark physical plan:
-- evidence/spark/query_plan.txt
+Contains:
 
-## Spark SQL and physical plans
+- positive count
+- negative count
+- class balance
 
-Important queries should retain `df.explain("formatted")` evidence. Reviews are expected to be much larger than the 50-row game dimension, so the game join is a candidate for broadcast after size verification. Otherwise Spark may choose a sort-merge join.
+---
 
-Operators to interpret include:
+## Platform Metrics
 
-- `Exchange` for shuffle boundaries
-- hash/sort aggregates for grouped metrics
-- `BroadcastHashJoin` versus `SortMergeJoin`
-- scans, filters, projections, and partition pruning
+Purpose:
 
-A shuffle is expected for high-cardinality `groupBy` operations unless upstream partitioning satisfies the requirement. Partition counts should be based on measured input size and executor capacity, not arbitrary tuning.
+```text
+Platform analysis
+```
 
-## Evidence and outputs
+Contains:
 
-Planned evidence includes query text, snapshot/version, row counts, formatted plans, measured runtime, shuffle read/write, and representative results. Gold analytical tables should remain reproducible from the same validated Silver snapshot.
+- Windows
+- macOS
+- Linux
+
+Platform totals may exceed review totals because games can support multiple
+platforms.
+
+---
+
+## Category Metrics
+
+Purpose:
+
+```text
+Steam category analysis
+```
+
+Category totals may overlap because games can have multiple categories.
+
+---
+
+## Purchase Metrics
+
+Purpose:
+
+```text
+Purchase source analysis
+```
+
+Contains:
+
+- Steam purchase.
+- Other source.
+- Recommendation statistics.
+
+---
+
+# Processing Pattern
+
+Typical Spark flow:
+
+```text
+Gold Dataset
+
+        |
+
+Spark DataFrame
+
+        |
+
+Transformations
+
+        |
+
+groupBy Aggregation
+
+        |
+
+Parquet Output
+
+        |
+
+Validation
+```
+
+Processing should be deterministic from the same Gold snapshot.
+
+---
+
+# Validation
+
+Analytics validation checks:
+
+- Output row counts.
+- Required fields.
+- Metric ranges.
+- Review reconciliation.
+- Invalid values.
+
+Example:
+
+```text
+0 <= recommendation_rate <= 1
+```
+
+Current Analytics additionally verifies reconciliation against Current Gold.
+
+---
+
+# Visualization
+
+Visualization consumes analytics outputs:
+
+```text
+Gold Analytics
+
+        |
+
+        v
+
+Charts / Reports
+```
+
+Visualization does not read:
+
+- Bronze.
+- Silver.
+- Raw API data.
+
+---
+
+# MongoDB Serving
+
+Analytics outputs can be published as serving views:
+
+```text
+Spark Analytics
+
+        |
+
+        v
+
+MongoDB
+```
+
+MongoDB stores prepared views only.
+
+HDFS remains the analytical source of truth.
+
+---
+
+# Future Improvements
+
+Possible extensions:
+
+- Incremental aggregate maintenance.
+- Dashboard-specific metrics.
+- Partition optimization.
+- Additional business analytics.

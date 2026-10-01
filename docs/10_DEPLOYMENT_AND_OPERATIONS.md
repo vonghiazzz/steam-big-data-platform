@@ -1,52 +1,469 @@
 # Deployment and Operations
 
-## Current and planned platform
+## Purpose
 
-Canonical HDFS Bronze/Silver/Gold batch storage is implemented. Kafka and Structured Streaming V1 code now supports `REVIEW_CREATED` with bounded local defaults and fixture validation; live end-to-end smoke evidence remains pending. MongoDB serving and broader cluster deployment remain planned.
+This document describes how to operate the local Big Data platform.
 
-## Core services
+The platform includes:
 
-- **HDFS:** authoritative Bronze/Silver/Gold storage, replication, immutable raw history, Parquet outputs
-- **Spark:** driver builds the execution plan; executors process partitions and shuffle data
-- **Kafka:** planned `steam_events` transport, partitioned primarily by `appid`, with retention for consumer recovery
-- **MongoDB:** planned serving views, not raw source-of-truth storage
+- HDFS data lake.
+- Spark batch processing.
+- Kafka realtime transport.
+- Spark Structured Streaming.
+- MongoDB serving.
+- Discovery automation.
+- Current Refresh automation.
+- MLlib batch retraining.
 
-Spark can run under Standalone, YARN, or Kubernetes depending on the final environment. The project should record the actual chosen deployment and software versions rather than claim all options were tested.
+---
 
-## Checkpoints and recovery
+# Service Responsibilities
 
-Structured Streaming checkpoints must live on durable shared storage and contain source progress, offsets, state metadata, and commit information. A job restart should use the same compatible query/checkpoint identity. State must be bounded through watermarks or explicit expiry.
+## HDFS
 
-Recovery assumptions:
+Role:
 
-- HDFS Bronze allows Silver/Gold batch rebuilds.
-- Kafka retention allows streaming consumers to resume within the retention window.
-- Failed Spark tasks can be retried from lineage/input.
-- Idempotent sinks prevent task or micro-batch retries from duplicating logical results.
+```text
+Analytical source of truth
+```
 
-Checkpoint backup is not a substitute for the immutable Bronze event archive.
+Stores:
 
-## Monitoring
+- Bronze datasets.
+- Silver datasets.
+- Gold datasets.
+- Streaming archives.
 
-Operational evidence should include:
+---
 
-- HDFS capacity, live nodes, replication/under-replicated blocks
-- Spark UI stages, task failures, executor memory, skew, shuffle read/write
-- driver and executor logs/metrics
-- Kafka broker/topic health and consumer lag
-- Structured Streaming input rate, processing rate, batch duration, watermark, and state size
-- MongoDB write errors, latency, and read-back checks
-- pipeline reconciliation counts and freshness timestamps
+## Spark
 
-Alerts should distinguish data-quality failures from infrastructure failures.
+Responsibilities:
 
-## Scalability considerations
+- Batch ETL.
+- Analytics.
+- Structured Streaming.
+- MLlib training.
 
-- Increase HDFS/Spark partitions with measured data volume; avoid many tiny files.
-- Scale Kafka partitions and consumers while preserving per-`appid` ordering needs.
-- Broadcast the small game dimension only after confirming its size.
-- Detect hot `appid` keys that can cause shuffle or Kafka partition skew.
-- Use compaction/partitioning policies for Bronze event archives and Silver/Gold Parquet.
-- Treat the current 50-game experiment as correctness evidence, not production-scale performance evidence.
+---
 
-Secrets must remain outside Git. Deployment changes should be reproducible, reviewed, and accompanied by rollback/recovery instructions.
+## Kafka
+
+Role:
+
+```text
+Realtime event transport
+```
+
+Current event:
+
+```text
+REVIEW_CREATED
+```
+
+Kafka is not permanent storage.
+
+---
+
+## MongoDB
+
+Role:
+
+```text
+Serving layer
+```
+
+Used for:
+
+- Historical analytics views.
+- Realtime metrics.
+- Future API access.
+
+---
+
+# Scheduler Operations
+
+The platform has two independent schedulers.
+
+---
+
+# Discovery Scheduler
+
+Purpose:
+
+```text
+Discover and onboard games
+```
+
+Flow:
+
+```text
+Catalog Discovery
+
+        |
+
+Qualification
+
+        |
+
+Registry
+
+        |
+
+Onboarding
+
+        |
+
+ACTIVE Games
+```
+
+Run:
+
+```bash
+bash scripts/run_discovery_scheduler.sh
+```
+
+Run one cycle:
+
+```bash
+bash scripts/run_discovery_scheduler.sh --run-once
+```
+
+Dry run:
+
+```bash
+bash scripts/run_discovery_scheduler.sh \
+  --run-once \
+  --dry-run
+```
+
+Runtime state:
+
+```text
+data/state/discovery/
+```
+
+---
+
+# Current Refresh Scheduler
+
+Purpose:
+
+```text
+Refresh Current Gold
+
+        |
+
+Refresh Analytics
+
+        |
+
+Conditional ML Retraining
+```
+
+Run:
+
+```bash
+bash scripts/run_current_refresh.sh
+```
+
+Run one cycle:
+
+```bash
+bash scripts/run_current_refresh.sh --run-once
+```
+
+Dry run:
+
+```bash
+bash scripts/run_current_refresh.sh \
+  --run-once \
+  --dry-run
+```
+
+Runtime state:
+
+```text
+data/state/current_refresh/
+```
+
+Tracked information:
+
+- Last refresh time.
+- Current Gold row count.
+- Last analytics refresh.
+- Last ML run.
+- Dataset fingerprint.
+- Retraining decision.
+
+---
+
+# Runtime State
+
+Runtime state is not committed to Git.
+
+Examples:
+
+```text
+data/state/
+
+    discovery/
+
+    current_refresh/
+
+    streaming/
+```
+
+Contains:
+
+- Scheduler state.
+- Locks.
+- Producer state.
+- Checkpoint metadata.
+
+---
+
+# Recovery Strategy
+
+The platform supports rebuilding from authoritative layers.
+
+Recovery flow:
+
+```text
+Bronze
+
+ |
+
+Silver rebuild
+
+ |
+
+Gold rebuild
+
+ |
+
+Current Gold rebuild
+
+ |
+
+Analytics refresh
+```
+
+Bronze remains unchanged during rebuilds.
+
+---
+
+# Streaming Operations
+
+Start Kafka:
+
+```bash
+docker compose -f compose.streaming.yaml up -d
+```
+
+Create topic:
+
+```bash
+bash scripts/create_streaming_topic.sh
+```
+
+Start producer:
+
+```bash
+bash scripts/run_review_producer.sh
+```
+
+Start streaming:
+
+```bash
+bash scripts/run_review_streaming.sh
+```
+
+---
+
+# Data Refresh Operations
+
+Refresh current snapshot:
+
+```bash
+bash scripts/run_current_refresh.sh --run-once
+```
+
+The workflow:
+
+```text
+Incremental Data
+
+        |
+
+Current Gold
+
+        |
+
+Current Analytics
+
+        |
+
+ML Retraining Policy
+```
+
+---
+
+# Monitoring
+
+## HDFS
+
+Monitor:
+
+- Storage capacity.
+- Data availability.
+- Permissions.
+- Replication status.
+
+---
+
+## Spark
+
+Monitor:
+
+- Job status.
+- Stage failures.
+- Executor memory.
+- Shuffle performance.
+- Runtime.
+
+---
+
+## Kafka
+
+Monitor:
+
+- Broker status.
+- Topic availability.
+- Consumer lag.
+
+---
+
+## Streaming
+
+Monitor:
+
+- Input rate.
+- Processing rate.
+- Batch duration.
+- Watermark.
+- State size.
+
+---
+
+## MongoDB
+
+Monitor:
+
+- Write errors.
+- Collection counts.
+- Read-back validation.
+- Query latency.
+
+---
+
+# Environment Configuration
+
+Secrets remain outside Git.
+
+Required configuration:
+
+```text
+.env
+```
+
+Important variables:
+
+```text
+HDFS_DEFAULT_FS
+
+HADOOP_USER_NAME
+
+KAFKA_BOOTSTRAP_SERVERS
+
+MONGO_URI
+```
+
+---
+
+# Local Execution Order
+
+Recommended order:
+
+## 1. Start Hadoop/HDFS
+
+Verify:
+
+```bash
+hdfs dfsadmin -report
+```
+
+---
+
+## 2. Start Kafka
+
+```bash
+docker compose -f compose.streaming.yaml up -d
+```
+
+---
+
+## 3. Start MongoDB
+
+```bash
+docker compose -f compose.mongodb.yaml up -d
+```
+
+---
+
+## 4. Start Streaming
+
+Producer:
+
+```bash
+bash scripts/run_review_producer.sh
+```
+
+Streaming:
+
+```bash
+bash scripts/run_review_streaming.sh
+```
+
+---
+
+## 5. Refresh Current Data
+
+```bash
+bash scripts/run_current_refresh.sh --run-once
+```
+
+---
+
+# Current Limitations
+
+Not included:
+
+- Kubernetes deployment.
+- Cloud infrastructure.
+- Production orchestration.
+- External service supervisor.
+- Backend deployment.
+- Frontend deployment.
+
+---
+
+# Future Operations
+
+Possible improvements:
+
+- OS/service supervisor.
+- Container orchestration.
+- Centralized monitoring.
+- Alerting.
+- Production deployment pipeline.

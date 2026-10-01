@@ -1,337 +1,378 @@
-# Streaming Pipeline — New Reviews and MongoDB Realtime Serving
+# Streaming Pipeline
 
-## Status and scope
+## Purpose
 
-Streaming V1 is implemented for `REVIEW_CREATED` only. The implementation
-has bounded unit/Spark fixture coverage and a bounded live Kafka-to-HDFS smoke
-run. Price changes, game metadata changes, and review updates are deliberately
-out of scope. MongoDB Serving V2 adds optional materialized views for validated
-new reviews; it does not replace Kafka or HDFS.
+Streaming V1 processes newly observed Steam reviews in near realtime.
 
-Steam does not provide this project with a native push stream. Near-real-time
-events are created by polling only registry entries whose status is `ACTIVE`:
+Supported event:
 
 ```text
-Game Registry (ACTIVE only)
--> bounded Steam review API polling
--> change detection by recommendationid
--> Kafka topic: steam_events
-       +-> raw archive -> /steam/bronze/stream_events
-       +-> Spark Structured Streaming
-             -> /steam/silver/reviews_incremental_v1
-             -> stream-static join with /steam/silver/games
-             -> /steam/gold/base_incremental_v1
-             +-> MongoDB recent_reviews
-             +-> 1-hour stateful windows -> MongoDB realtime_game_metrics
+REVIEW_CREATED
 ```
 
-The producer never scans the Steam catalog and never falls back to every known
-game. At startup it reports registry total, `ACTIVE`, `RETIRED`, and actual poll
-scope. An empty `ACTIVE` set stops cleanly. `STREAM_MAX_ACTIVE_GAMES` is a
-second guard against accidental scope expansion.
-
-## First-run bootstrap and producer state
-
-Producer state is a local SQLite database:
+Main flow:
 
 ```text
-data/state/streaming/review_producer_v1.sqlite3
+ACTIVE Game Registry
+
+        |
+
+Steam Review Polling
+
+        |
+
+Kafka
+
+        |
+
+Spark Structured Streaming
+
+        |
+
+Incremental Silver
+
+        |
+
+Incremental Gold
+
+        |
+
+Realtime Serving
 ```
 
-It is runtime state and is excluded from Git. The database stores per-game
-initialization/high-water metadata, every known `recommendationid`, and a
-durable event outbox.
+---
 
-For each newly observed `ACTIVE` game, the producer first seeds known IDs from
-the canonical HDFS Bronze review file. It then polls a bounded number of the
-newest Steam review pages and marks those reviews as the current baseline. This
-first contact emits **zero** events, so the existing canonical 25,000 reviews
-are not republished.
+# Event Source
 
-Later polls start from the newest page and stop when they overlap a known
-`recommendationid`. If the configured page bound is exhausted without an
-overlap, the game fails closed and publishes nothing. Successfully published
-IDs are persisted and are not emitted again on a normal restart.
+Steam does not provide a native push stream for this project.
 
-The outbox makes publishing at-least-once across a process crash. A crash after
-Kafka acknowledgement but before the SQLite acknowledgement can replay the
-same deterministic `event_id`; Spark therefore also deduplicates by the
-business key `recommendationid`.
+Realtime events are generated through polling:
 
-Production bootstrap reads `/steam/bronze/reviews` through the NameNode as the
-source of truth. Local JSONL bootstrap is available only through the explicit
-`--bootstrap-source local` test/fixture mode. Baseline seeding is capped by
-`STREAM_BOOTSTRAP_MAX_IDS_PER_GAME` (default 1,000; the current cohort has 500
-per game).
+```text
+Game Registry
 
-## Event contract
+        |
+
+ACTIVE Games
+
+        |
+
+Steam Review API
+
+        |
+
+Change Detection
+
+        |
+
+Kafka Event
+```
+
+The producer only processes managed ACTIVE games.
+
+It does not crawl the complete Steam catalog.
+
+---
+
+# Kafka Layer
+
+Kafka provides temporary event transport.
+
+Topic:
+
+```text
+steam_events
+```
+
+Purpose:
+
+- Decouple producer and streaming jobs.
+- Provide event buffering.
+- Support consumer recovery.
+
+Kafka is not the source of truth.
+
+Durable storage remains HDFS.
+
+---
+
+# Event Contract
+
+Main event:
+
+```text
+REVIEW_CREATED
+```
+
+Example:
 
 ```json
 {
-  "event_id": "REVIEW_CREATED:570:123456789",
   "event_type": "REVIEW_CREATED",
   "appid": 570,
-  "event_time": "2026-09-29T00:00:00+00:00",
-  "produced_at": "2026-09-29T00:00:01+00:00",
-  "payload": { "recommendationid": "123456789" }
+  "recommendationid": "123456789",
+  "event_time": "2026-09-30T12:49:46Z"
 }
 ```
 
-`payload` is the unmodified Steam review object. Kafka messages use `appid` as
-their key, retaining per-game ordering within a partition.
+Primary business key:
 
-## Kafka local-safety configuration
-
-`compose.streaming.yaml` defines one KRaft broker. The topic setup script
-creates `steam_events` with these configurable local defaults:
-
-| Setting | Default |
-|---|---:|
-| Partitions | 3 |
-| Replication factor | 1 |
-| `KAFKA_RETENTION_MS` | 86,400,000 (one day) |
-| `KAFKA_RETENTION_BYTES` | 536,870,912 |
-| Producer compression | gzip |
-
-Kafka is bounded transport, not permanent storage. HDFS Bronze is the durable
-raw event archive. Broker logs are explicitly placed in the Compose-managed
-`kafka-data` volume at `/var/lib/kafka/data`; retention still applies and the
-volume is not a replacement for Bronze.
-
-Runtime configuration comes from the project-local `.env`. The committed
-`.env.example` is only a template for new machines. Compose reads `.env`
-directly, while the topic, producer, streaming, and storage scripts load it
-through `scripts/load_project_env.sh`. Variables explicitly supplied on the
-command line take precedence, which keeps isolated test overrides safe.
-
-```bash
-cp .env.example .env  # first-time setup only; replace every CHANGE_ME value
+```text
+recommendationid
 ```
+
+Used for:
+
+- Deduplication.
+- Idempotent processing.
+
+---
+
+# Producer State
+
+The producer maintains runtime state:
+
+```text
+data/state/streaming/
+```
+
+State includes:
+
+- Known recommendation IDs.
+- Per-game polling state.
+- Event delivery information.
+
+Runtime state is not committed to Git.
+
+---
+
+# Bootstrap Behavior
+
+When a game becomes ACTIVE:
+
+```text
+ACTIVE Game
+
+        |
+
+Seed historical review IDs
+
+        |
+
+Start polling
+
+        |
+
+Emit only new reviews
+```
+
+Historical reviews are not replayed as realtime events.
+
+---
+
+# Structured Streaming Flow
+
+Spark Structured Streaming consumes Kafka events:
+
+```text
+Kafka
+
+ |
+
+Event Validation
+
+ |
+
+Deduplication
+
+ |
+
+Incremental Silver
+
+ |
+
+Incremental Gold
+```
+
+Processing guarantees:
+
+- Invalid events are rejected.
+- Duplicate recommendation IDs are removed.
+- Checkpoints support restart.
+
+---
+
+# Incremental Silver
+
+Purpose:
+
+```text
+Validated realtime records
+```
+
+Path:
+
+```text
+/steam/silver/reviews_incremental_v1
+```
+
+Responsibilities:
+
+- Validate event schema.
+- Normalize fields.
+- Preserve streaming contract.
+
+---
+
+# Incremental Gold
+
+Purpose:
+
+```text
+Realtime analytical records
+```
+
+Path:
+
+```text
+/steam/gold/base_incremental_v1
+```
+
+Responsibilities:
+
+- Join game metadata.
+- Produce review-level records.
+- Maintain recommendation grain.
+
+Incremental Gold does not overwrite Historical Gold.
+
+---
+
+# Current Gold Integration
+
+Streaming output becomes part of the operational snapshot through Current Gold.
+
+Flow:
+
+```text
+Historical Gold
+
+        +
+
+Incremental Gold
+
+        |
+
+        v
+
+Current Gold
+
+        |
+
+        v
+
+Current Analytics / ML Refresh
+```
+
+Streaming does not directly trigger ML training.
+
+Current Refresh Scheduler controls analytics and ML updates.
+
+---
+
+# Realtime Serving
+
+Realtime outputs can be served through MongoDB.
+
+Collections:
+
+```text
+recent_reviews
+
+realtime_game_metrics
+```
+
+Purpose:
+
+- Latest review feed.
+- Windowed game metrics.
+
+---
+
+# Checkpoints
+
+Streaming checkpoints store:
+
+- Kafka offsets.
+- Spark progress.
+- Stateful processing information.
+
+Example:
+
+```text
+/steam/checkpoints/
+```
+
+Checkpoint deletion should only happen during controlled rebuilds.
+
+---
+
+# Running Streaming
+
+Start Kafka:
 
 ```bash
 docker compose -f compose.streaming.yaml up -d
+```
+
+Create topic:
+
+```bash
 bash scripts/create_streaming_topic.sh
 ```
 
-## Producer cadence
-
-Run one controlled cycle first:
-
-```bash
-bash scripts/run_review_producer.sh --once --max-games 2
-```
-
-Then run the normal producer only after bootstrap evidence is checked:
+Run producer:
 
 ```bash
 bash scripts/run_review_producer.sh
 ```
 
-`STREAM_POLL_INTERVAL_SECONDS` defaults to 600 seconds. API page count, request
-delay, active-game cap, retry count, and minimum host free space are also
-configurable. Continuous mode also enforces the configurable
-`STREAM_MIN_POLL_INTERVAL_SECONDS` safety floor (default 300 seconds). Poll
-cadence is not the Spark trigger cadence: the producer asks Steam for changes,
-while Spark independently checks Kafka for available events.
-
-## Bronze archive and invalid-event policy
-
-Every Kafka value is archived with its parsed envelope, raw value, key,
-partition, offset, and Kafka timestamp under:
-
-```text
-/steam/bronze/stream_events/ingest_date=YYYY-MM-DD/
-```
-
-Business cleaning is not applied to Bronze. Malformed/unsupported records do
-not terminate the stream; they are written with raw event, error reason,
-available IDs, Kafka partition/offset, and processing timestamp to:
-
-```text
-/steam/quarantine/review_events/ingest_date=YYYY-MM-DD/
-```
-
-Systemic failures such as an inaccessible broker, incompatible checkpoint, or
-unreadable HDFS path still fail the query visibly.
-
-## Silver and Gold incremental outputs
-
-Valid `REVIEW_CREATED` events reuse the canonical batch Silver Review
-transformation. A static anti-join against canonical Silver IDs provides an
-additional guard against reintroducing one of the historical 25,000 reviews.
-Event-time watermarking and `recommendationid` deduplication bound Spark state.
-Spark 4.2 uses `dropDuplicatesWithinWatermark(["recommendationid"])` after
-`withWatermark("event_time_ts", "7 days")`. The state store can therefore evict
-old keys as the watermark advances instead of retaining every ID forever.
-
-Streaming does not overwrite the validated batch datasets:
-
-```text
-Batch:      /steam/silver/reviews
-Streaming:  /steam/silver/reviews_incremental_v1/ingest_date=YYYY-MM-DD/
-
-Batch:      /steam/gold/base
-Streaming:  /steam/gold/base_incremental_v1/review_date=YYYY-MM-DD/
-```
-
-Gold reads only incremental Silver review files and joins them to the persisted
-`/steam/silver/games` snapshot. It retains one row per recommendation and does
-not introduce review text, `overall_positive_rate`, `primary_genre`, or
-`package_groups`. Its `foreachBatch` sink anti-joins existing incremental Gold
-IDs before append, so a deliberately reset Gold checkpoint cannot duplicate
-rows already present in the output path.
-
-## MongoDB realtime serving
-
-MongoDB realtime serving is disabled by default. Enable it with
-`MONGO_REALTIME_ENABLED=true`; the existing Streaming V1 HDFS behavior remains
-unchanged when it is false. The sink reuses `MONGO_URI` (default
-`mongodb://localhost:27017`) and `MONGO_DATABASE` (default `steam_analytics`).
-Collection names default to `recent_reviews` and `realtime_game_metrics` and can
-be overridden with `MONGO_RECENT_REVIEWS_COLLECTION` and
-`MONGO_REALTIME_METRICS_COLLECTION`.
-
-Both Mongo queries read the validated incremental Silver file stream. This is a
-deliberate stage boundary: malformed events have already gone to quarantine,
-`recommendationid` duplicates have been removed with the watermark, and the
-canonical historical IDs have already been rejected by the static anti-join.
-It also avoids a second Kafka pipeline and avoids chaining deduplication and
-window aggregation as two stateful operators in one `update` query. The
-`event_time_ts` used for the one-hour window is reconstructed exactly from the
-same Steam `timestamp_created` epoch used by the producer's envelope
-`event_time`.
-
-`recent_reviews` stores one document per review with `_id = recommendationid`.
-`realtime_game_metrics` uses one-hour tumbling event-time windows grouped by
-`appid`; each document key is
-`appid:window_start_utc:window_end_utc`. Its metrics are `review_count`,
-`positive_reviews`, `negative_reviews`, and `recommendation_rate`. The metric
-query uses `outputMode("update")`, so MongoDB receives evolving materialized
-state before the watermark closes the window.
-
-Structured Streaming may retry a `foreachBatch`. Both collections therefore
-use deterministic keys with PyMongo replacement upserts. This is retry-safe and
-idempotent for serving state; it is not a claim of exactly-once MongoDB delivery.
-MongoDB is only the serving/materialized-view layer. Kafka plus HDFS remain the
-transport, source, history, and replay layers.
-
-Each Mongo query owns a separate checkpoint:
-
-```text
-/steam/checkpoints/mongodb/recent_reviews
-/steam/checkpoints/mongodb/realtime_game_metrics
-```
-
-Do not share or delete these checkpoints during normal operation. If realtime
-serving is enabled and MongoDB is unavailable, startup fails visibly instead of
-silently skipping Mongo writes.
-
-Serving V2 does not include price updates, player-count updates, metadata
-updates, `game_current_state`, API/frontend/WebSocket work, or model
-predictions.
-
-## Isolated fixture/E2E resources
-
-Fixture runs must never use the production topic, output paths, or checkpoints.
-`tests/publish_streaming_smoke_fixture.py` defaults to `steam_events_test`.
-Create that topic with the bounded defaults, then run its consumer with all
-three isolation variables set:
-
-```bash
-KAFKA_TOPIC=steam_events_test bash scripts/create_streaming_topic.sh
-
-KAFKA_TOPIC=steam_events_test \
-STREAM_HDFS_ROOT=/steam/test/streaming_v1 \
-STREAM_CHECKPOINT_ROOT=/steam/test/checkpoints \
-STREAM_AVAILABLE_NOW=true \
-bash scripts/run_review_streaming.sh
-```
-
-This maps test outputs below `/steam/test/streaming_v1/{bronze,silver,gold,quarantine}`
-and all test checkpoints below `/steam/test/checkpoints`. Leaving the two root
-variables unset keeps the production `/steam/...` paths listed above.
-
-## Checkpoints and restart semantics
-
-```text
-/steam/checkpoints/review_bronze_archive_v1
-/steam/checkpoints/review_silver_v1
-/steam/checkpoints/review_quarantine_v1
-/steam/checkpoints/review_gold_v1
-```
-
-These controls solve different problems:
-
-- Kafka offsets identify transport records consumed by each Spark query.
-- Spark checkpoints retain offsets, file-sink commits, watermark, and state.
-- `recommendationid` is the business key used by producer and Spark deduplication.
-
-Deleting or reusing an incompatible checkpoint is not a normal restart
-procedure.
-
-The Spark trigger defaults to one minute and can be changed with
-`STREAM_SPARK_TRIGGER_INTERVAL`:
+Run streaming:
 
 ```bash
 bash scripts/run_review_streaming.sh
 ```
 
-For a bounded smoke run, set `STREAM_AVAILABLE_NOW=true`. Kafka-facing queries
-finish first, then Gold runs against the Silver files committed in that bounded
-run; no indefinite process remains.
+---
 
-The local Mac driver defaults to
-`HDFS_DEFAULT_FS=hdfs://bda501-namenode.orb.local:8020`; override this setting
-when the NameNode is exposed under a different address. `HADOOP_USER_NAME`
-defaults to `hadoop` in the run script. `STREAM_HDFS_REPLICATION` defaults to
-one, matching the single-DataNode lab rather than requesting unavailable
-replicas.
+# Validation
 
-## Disk and small-file safety
+Streaming validation includes:
 
-`scripts/check_streaming_storage.sh` reports host free space, Docker storage,
-HDFS capacity and `/steam` usage, checkpoint sizes, and Kafka log size. It never
-runs prune or deletion commands. `STREAM_MIN_FREE_GB` controls its warning/error
-threshold and the same threshold causes the producer to stop before a poll.
+- Event schema validation.
+- Duplicate detection.
+- Incremental output checks.
+- MongoDB serving checks.
 
-Kafka retention and maximum offsets per trigger bound transport/backlog work.
-HDFS outputs are partitioned by ingestion/review date rather than `appid`, and
-each local micro-batch is coalesced to one output task. This avoids one file per
-review, although low-volume minute batches can still create small files. A
-future maintenance job should periodically compact many small Parquet files
-into fewer larger files; V1 does not schedule destructive compaction.
-
-Stateful shuffle partitions default to three for this single-machine lab. The
-Silver transform deliberately avoids a stream-stream self-join; it reuses the
-batch projection directly and derives its date partition from
-`timestamp_created`. This keeps both data files and checkpoint metadata bounded
-to a sensible local scale.
-
-SQLite intentionally retains every successfully published ID for restart-safe
-producer deduplication. The canonical bootstrap portion is bounded per game,
-but published IDs grow over time; this is acceptable for the 50-game V1 lab and
-is an explicit MVP limitation. A future version should archive an ID ledger,
-prune IDs older than a proven Steam overlap/retention horizon, and run SQLite
-`VACUUM` during controlled maintenance. Spark state is separately bounded by
-its watermark; Kafka offsets/checkpoints do not replace business-key handling.
-
-## New-game handoff
-
-The preserved onboarding contract is:
+Expected properties:
 
 ```text
-NEW
--> historical batch backfill
--> Bronze verification
--> producer high-water bootstrap (emits zero)
--> mark ACTIVE
--> incremental polling
+No duplicate recommendationid
+
+Valid recommendation_rate
+
+Correct incremental counts
 ```
 
-A `NEW` game must never become a source of historical `REVIEW_CREATED` events.
+---
 
-## Future streaming backlog
+# Current Limitations
 
-- `REVIEW_UPDATED`
-- `PRICE_CHANGED`
-- `GAME_METADATA_CHANGED`
+Not implemented:
+
+- REVIEW_UPDATED.
+- PRICE_CHANGED.
+- GAME_METADATA_CHANGED.
+- Player-count events.
+
+Future realtime events should follow the same event → Silver → Gold contract.

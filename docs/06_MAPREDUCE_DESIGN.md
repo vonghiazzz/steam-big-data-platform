@@ -1,54 +1,252 @@
 # MapReduce Design
 
-## Status and purpose
+## Purpose
 
-The MapReduce job is **Planned**. It provides a meaningful distributed aggregation and an independent correctness check against equivalent PySpark aggregation; it is not a replacement for Bronze-to-Silver data engineering.
+The MapReduce component provides an independent aggregation path to validate
+Spark analytical results.
 
-## Input and mapper
+It is a validation pipeline, not the main analytics engine.
 
-The job consumes review records with valid `appid`, `voted_up`, and `playtime_at_review`. The preferred input is a stable validated contract produced from the raw review scope, or a parser that explicitly rejects malformed Bronze records.
-
-Conceptual mapper output:
-
-```text
-appid -> (1, positive_flag, playtime_at_review)
-```
-
-Where:
-
-- `1` contributes to review count
-- `positive_flag` is `1` when `voted_up=true`, otherwise `0`
-- `playtime_at_review` contributes to an additive playtime sum
-
-Diagnostics and malformed-record counters must go to stderr/counters, while stdout contains only key/value records.
-
-## Shuffle, grouping, and optional combiner
-
-Hadoop partitions mapper output by `appid`, shuffles records across the cluster, sorts them, and groups all values for the same game before reduction. A combiner may safely sum the three additive values because count, positive count, and playtime sum are associative and commutative. Correctness must not depend on the combiner running.
-
-The combiner must not calculate recommendation rate or average playtime from partial groups. It emits the same intermediate state so Hadoop may execute it zero, one, or multiple times.
-
-## Reducer metrics
-
-For each `appid`, the reducer totals:
+Flow:
 
 ```text
-review_count       = SUM(count)
-positive_count     = SUM(positive_flag)
-recommendation_rate = positive_count / review_count
-average_playtime    = SUM(playtime_at_review) / review_count
+HDFS Bronze Reviews
+
+        |
+
+        v
+
+Hadoop Streaming MapReduce
+
+        |
+
+        v
+
+Game-level Metrics
+
+        |
+
+        v
+
+Compare with Spark Results
 ```
 
-Output should use deterministic field order and documented numeric formatting. Zero-count groups are invalid and should never be emitted.
+---
 
-## Spark validation
+# Input Data
 
-PySpark will calculate the same metrics using `groupBy("appid")` and equivalent null/type rules. Validation should compare:
+MapReduce consumes validated review records.
 
-- number and set of `appid` groups
-- per-game review and positive counts
-- recommendation rate within the chosen exact/rounding contract
-- average playtime within the chosen exact/rounding contract
-- aggregate input/output reconciliation
+Required fields:
 
-The validation must use the same versioned input snapshot. A mismatch should be diagnosed as parsing, filtering, grouping, null handling, or numeric-format behavior rather than hidden by changing expected results.
+```text
+appid
+
+voted_up
+
+playtime_at_review
+```
+
+Input data should come from a reproducible snapshot.
+
+Malformed records should be counted separately instead of silently affecting
+aggregation results.
+
+---
+
+# Mapper
+
+Mapper converts each review into an intermediate key/value pair.
+
+Concept:
+
+```text
+appid -> (count, positive_count, playtime_sum)
+```
+
+Example:
+
+Input:
+
+```text
+appid=570
+
+voted_up=true
+
+playtime_at_review=120
+```
+
+Output:
+
+```text
+570 -> (1,1,120)
+```
+
+---
+
+# Shuffle and Grouping
+
+Hadoop automatically performs:
+
+```text
+Mapper Output
+
+        |
+
+        v
+
+Partition
+
+        |
+
+        v
+
+Shuffle
+
+        |
+
+        v
+
+Sort
+
+        |
+
+        v
+
+Reducer Grouping
+```
+
+All records with the same `appid` are processed together.
+
+---
+
+# Combiner
+
+A combiner can optimize intermediate aggregation.
+
+Safe operations:
+
+```text
+review count
+
++
+
+positive count
+
++
+
+playtime sum
+```
+
+The combiner must not calculate:
+
+- recommendation rate.
+- average playtime.
+
+Those require final reducer results.
+
+---
+
+# Reducer
+
+Reducer produces game-level metrics.
+
+For each:
+
+```text
+appid
+```
+
+Calculate:
+
+```text
+review_count
+
+positive_count
+
+recommendation_rate
+
+average_playtime
+```
+
+Formula:
+
+```text
+recommendation_rate =
+positive_count / review_count
+
+
+average_playtime =
+playtime_sum / review_count
+```
+
+---
+
+# Spark Validation
+
+Spark independently calculates equivalent metrics.
+
+Comparison checks:
+
+- Same appid groups.
+- Same review counts.
+- Same positive counts.
+- Same recommendation rate.
+- Same average playtime.
+- Same reconciliation totals.
+
+The comparison must use the same input snapshot.
+
+---
+
+# Execution Role
+
+MapReduce provides:
+
+```text
+Independent implementation
+
+        +
+
+Distributed processing example
+
+        +
+
+Spark correctness validation
+```
+
+It does not replace:
+
+- Spark SQL analytics.
+- Gold generation.
+- MLlib training.
+
+---
+
+# Evidence
+
+Validation evidence should include:
+
+- Input snapshot.
+- Mapper/reducer output.
+- Spark comparison result.
+- Mismatch count.
+
+Expected result:
+
+```text
+CROSS-CHECK: PASS
+```
+
+with zero metric mismatches.
+
+---
+
+# Future Extensions
+
+Possible improvements:
+
+- Larger distributed datasets.
+- Additional aggregation jobs.
+- Automated comparison reports.
+- Multi-snapshot validation.
