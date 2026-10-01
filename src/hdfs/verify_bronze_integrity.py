@@ -25,7 +25,7 @@ from pathlib import Path
 # ---------- I/O helpers: same interface for local disk and HDFS ----------
 class Source:
     def list_reviews(self): raise NotImplementedError
-    def games_path(self): raise NotImplementedError
+    def list_games(self): raise NotImplementedError
     def open_lines(self, path): raise NotImplementedError   # yields raw bytes lines
 
 
@@ -33,8 +33,8 @@ class LocalSource(Source):
     def __init__(self, root):
         self.root = Path(root)
 
-    def games_path(self):
-        return str(self.root / "landing/games/games_raw.jsonl")
+    def list_games(self):
+        return sorted(str(p) for p in (self.root / "landing/games").glob("*.jsonl"))
 
     def list_reviews(self):
         return sorted(str(p) for p in (self.root / "bronze_ready/reviews_by_game").glob("*.jsonl"))
@@ -51,8 +51,10 @@ class HdfsSource(Source):
     def _dx(self, *args):
         return ["docker", "exec", self.c, *args]
 
-    def games_path(self):
-        return f"{self.games_dir}/games_raw.jsonl"
+    def list_games(self):
+        out = subprocess.run(self._dx("hdfs", "dfs", "-ls", self.games_dir),
+                             capture_output=True, text=True, check=True).stdout
+        return sorted(ln.split()[-1] for ln in out.splitlines() if ln.startswith("-"))
 
     def list_reviews(self):
         out = subprocess.run(self._dx("hdfs", "dfs", "-ls", self.reviews_dir),
@@ -107,15 +109,16 @@ def main():
 
     # ---- games ----
     say("\n== games ==")
-    gpath = src.games_path()
+    game_files = src.list_games()
     games, bad = [], 0
-    for raw in src.open_lines(gpath):
-        try:
-            games.append(json.loads(raw))
-        except ValueError:
-            bad += 1
+    for gpath in game_files:
+        for raw in src.open_lines(gpath):
+            try:
+                games.append(json.loads(raw))
+            except ValueError:
+                bad += 1
     game_ids = {str(g.get("appid")) for g in games}
-    say(f"  file: {gpath}")
+    say(f"  files: {len(game_files)}")
     check(len(games) == a.expect_games and bad == 0, f"game records = {len(games)} (expected {a.expect_games}), unparsable = {bad}")
     check(len(game_ids) == a.expect_games, f"unique game appid = {len(game_ids)}")
     check(all(g.get("success") is True for g in games), "all game records have success=true")
@@ -172,24 +175,50 @@ def main():
 
     # cross-check with the handoff's own validation_report.json
     vr = Path(a.local_root) / "bronze_ready/validation_report.json"
-    if vr.exists():
+    local_review_count = len(local.list_reviews())
+    same_as_local_snapshot = (
+        a.source == "local"
+        or (
+            len(files) == local_review_count
+            and len(games) == a.expect_games == local_review_count
+        )
+    )
+    if vr.exists() and same_as_local_snapshot:
         rep = json.loads(vr.read_text(encoding="utf-8"))
         check(rep["label_counts"]["positive"] == labels[True] and rep["label_counts"]["negative"] == labels[False],
               "positive/negative counts match validation_report.json")
         check(rep["empty_review_text"] == empty_text, "empty-text count matches validation_report.json")
         check({k: int(v) for k, v in rep["per_game_counts"].items()} == {k: int(v) for k, v in per_game.items()},
               "per-game counts match validation_report.json")
+    elif vr.exists():
+        say(
+            "  info: baseline validation_report.json comparison skipped "
+            "for an expanded dynamic HDFS snapshot"
+        )
 
     if a.source == "hdfs":
         say("\n== byte-level integrity (HDFS vs local copy) ==")
-        # games file too
-        h = hashlib.md5()
-        for raw in src.open_lines(gpath):
-            h.update(raw)
-        lg = local.games_path()
-        if os.path.exists(lg) and md5_of_local(lg) != h.hexdigest():
-            md5_bad.append("games_raw.jsonl")
-        check(not md5_bad and os.path.exists(lg), f"md5 identical for games + {len(files)} review files (mismatch: {md5_bad or 'none'})")
+        local_games = {os.path.basename(p): p for p in local.list_games()}
+        compared_games = 0
+        for remote_game in game_files:
+            name = os.path.basename(remote_game)
+            if name not in local_games:
+                continue
+            h = hashlib.md5()
+            for raw in src.open_lines(remote_game):
+                h.update(raw)
+            compared_games += 1
+            if md5_of_local(local_games[name]) != h.hexdigest():
+                md5_bad.append(name)
+        compared_reviews = sum(
+            1 for path in files if os.path.basename(path) in local_files
+        )
+        check(
+            not md5_bad,
+            "md5 identical for locally mirrored Bronze files "
+            f"(games={compared_games}, reviews={compared_reviews}, "
+            f"mismatch: {md5_bad or 'none'})",
+        )
 
     say("\nRESULT: " + ("PASS" if not errors else "FAIL"))
     for e in errors:

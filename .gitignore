@@ -24,6 +24,7 @@ data/bronze/
 data/silver/
 data/gold/
 data/state/
+data/onboarding/
 
 # Generated outputs
 output/

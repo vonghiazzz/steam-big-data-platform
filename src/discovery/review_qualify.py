@@ -5,15 +5,9 @@ from pathlib import Path
 
 import requests
 
-from steam.common.config import (
-    ELIGIBLE_GAMES_PATH,
-    REVIEW_PROBE_PATH,
-)
-from steam.common.jsonl import (
-    read_jsonl,
-    write_jsonl,
-)
-from steam.discovery.policy import (
+from ..common.jsonl import read_jsonl, write_jsonl
+from .paths import ELIGIBLE_GAMES_PATH, REVIEW_PROBE_PATH
+from .policy import (
     DEFAULT_POLICY_PATH,
     GameQualificationInput,
     evaluate_qualification,
@@ -68,7 +62,7 @@ def qualify_reviews(
     output_path: Path,
     delay: float,
     policy_path: Path = DEFAULT_POLICY_PATH,
-) -> None:
+) -> list[dict]:
     policy = load_discovery_policy(
         policy_path
     )
@@ -547,6 +541,7 @@ def qualify_reviews(
     print(
         output_path
     )
+    return results
 
 
 def main():

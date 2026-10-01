@@ -7,12 +7,12 @@ from pathlib import Path
 
 import requests
 
-from steam.common.config import (
+from src.common.config import (
     LANDING_ROOT,
     SELECTED_GAMES_PATH,
 )
-from steam.common.jsonl import read_jsonl
-from steam.discovery.policy import (
+from src.common.jsonl import read_jsonl
+from src.discovery.policy import (
     DEFAULT_POLICY_PATH,
     RetryPolicy,
     load_discovery_policy,
@@ -29,6 +29,7 @@ HEADERS = {
 }
 
 MAX_NO_NEW_PAGES = 3
+HISTORICAL_REVIEW_FILTER = "all"
 
 
 def utc_now():
@@ -132,7 +133,7 @@ def request_review_page(
 
     params = {
         "json": 1,
-        "filter": "recent",
+        "filter": HISTORICAL_REVIEW_FILTER,
         "language": "english",
         "review_type": "all",
         "purchase_type": "all",
@@ -348,9 +349,10 @@ def crawl_game(
         )
     )
 
-    if game_state.get(
-        "status"
-    ) in (
+    state_filter = game_state.get("review_filter", "recent")
+    same_filter_contract = state_filter == HISTORICAL_REVIEW_FILTER
+
+    if same_filter_contract and game_state.get("status") in (
         "EXHAUSTED",
         "EXHAUSTED_STAGNANT",
     ):
@@ -378,10 +380,7 @@ def crawl_game(
             seen_ids
         )
 
-    cursor = game_state.get(
-        "next_cursor",
-        "*",
-    )
+    cursor = game_state.get("next_cursor", "*") if same_filter_contract else "*"
 
     page_number = game_state.get(
         "next_page_number",
@@ -589,6 +588,7 @@ def crawl_game(
             "next_cursor": (
                 response_cursor
             ),
+            "review_filter": HISTORICAL_REVIEW_FILTER,
             "updated_at": utc_now(),
         }
 

@@ -5,6 +5,8 @@ from pathlib import Path
 
 from src.streaming.producer_state import ProducerState
 from src.streaming.review_producer import (
+    ActiveScopeSafetyError,
+    ActiveScopeTracker,
     LocalJsonlReviewSource,
     ReviewProducerService,
     load_active_scope,
@@ -45,6 +47,48 @@ class FakePublisher:
 
     def close(self):
         return None
+
+
+class FakeBaselineSource:
+    def __init__(self, reviews_by_appid):
+        self.reviews_by_appid = reviews_by_appid
+        self.calls = []
+
+    def load_reviews(self, appid):
+        self.calls.append(appid)
+        return list(self.reviews_by_appid.get(appid, []))
+
+
+class PerGameClient:
+    def __init__(self, reviews_by_appid):
+        self.reviews_by_appid = reviews_by_appid
+        self.calls = []
+
+    def fetch_page(self, appid, cursor):
+        self.calls.append((appid, cursor))
+        return {
+            "success": 1,
+            "reviews": list(self.reviews_by_appid.get(appid, [])),
+            "cursor": "",
+        }
+
+
+def write_registry(path: Path, statuses: dict[int, str]) -> None:
+    path.write_text(
+        "".join(
+            json.dumps(
+                {
+                    "appid": appid,
+                    "status": status,
+                    "source": "TEST",
+                    "policy_version": 1,
+                }
+            )
+            + "\n"
+            for appid, status in sorted(statuses.items())
+        ),
+        encoding="utf-8",
+    )
 
 
 class ProducerV1Test(unittest.TestCase):
@@ -138,6 +182,175 @@ class ProducerV1Test(unittest.TestCase):
             active, counts = load_active_scope(registry)
             self.assertEqual([entry.appid for entry in active], [10])
             self.assertEqual(counts, {"total": 3, "active": 1, "retired": 1})
+
+    def test_scope_reload_detects_additions_removals_and_unchanged_registry(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "registry.jsonl"
+            write_registry(registry, {10: "ACTIVE", 20: "NEW"})
+            tracker = ActiveScopeTracker(
+                registry_path=registry,
+                max_active_games=10,
+            )
+
+            initial = tracker.reload()
+            unchanged = tracker.reload()
+            write_registry(registry, {10: "ACTIVE", 20: "ACTIVE"})
+            expanded = tracker.reload()
+            write_registry(registry, {10: "PAUSED", 20: "ACTIVE"})
+            reduced = tracker.reload()
+
+            self.assertEqual((10,), initial.added_appids)
+            self.assertEqual((10,), tuple(entry.appid for entry in initial.entries))
+            self.assertEqual((), unchanged.added_appids)
+            self.assertEqual((), unchanged.removed_appids)
+            self.assertEqual((20,), expanded.added_appids)
+            self.assertEqual((10,), reduced.removed_appids)
+            self.assertEqual((20,), tuple(entry.appid for entry in reduced.entries))
+
+    def test_new_active_game_bootstraps_without_emitting_history_then_emits_new(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            registry = root / "registry.jsonl"
+            write_registry(registry, {10: "ACTIVE", 20: "NEW"})
+            tracker = ActiveScopeTracker(
+                registry_path=registry,
+                max_active_games=10,
+            )
+            tracker.reload()
+
+            baseline = FakeBaselineSource(
+                {
+                    10: [review("history-10", 100)],
+                    20: [review("history-20", 100)],
+                }
+            )
+            client = PerGameClient(
+                {
+                    10: [review("history-10", 100)],
+                    20: [review("history-20", 100)],
+                }
+            )
+            publisher = FakePublisher()
+            with ProducerState(root / "state.sqlite3") as state:
+                service = ReviewProducerService(
+                    state=state,
+                    client=client,
+                    publisher=publisher,
+                    max_pages=1,
+                    request_delay_seconds=0,
+                    baseline_source=baseline,
+                    clock=lambda: "2026-10-01T00:00:00+00:00",
+                )
+                service.poll_game(10)
+
+                write_registry(registry, {10: "ACTIVE", 20: "ACTIVE"})
+                expanded = tracker.reload()
+                first_new_game_poll = service.poll_game(20)
+                unchanged = tracker.reload()
+                second_new_game_poll = service.poll_game(20)
+
+                self.assertEqual((20,), expanded.added_appids)
+                self.assertEqual((), unchanged.added_appids)
+                self.assertTrue(first_new_game_poll.bootstrap)
+                self.assertEqual(0, first_new_game_poll.emitted)
+                self.assertEqual(0, second_new_game_poll.emitted)
+                self.assertEqual(1, baseline.calls.count(20))
+                self.assertTrue(state.has_seen(20, "history-20"))
+                self.assertEqual([], publisher.events)
+
+                client.reviews_by_appid[20] = [
+                    review("future-20", 200),
+                    review("history-20", 100),
+                ]
+                future = service.poll_game(20)
+                self.assertEqual(1, future.emitted)
+                self.assertEqual(
+                    "REVIEW_CREATED:20:future-20",
+                    publisher.events[0][1]["event_id"],
+                )
+
+    def test_removed_game_is_not_polled_and_its_state_is_retained(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            registry = root / "registry.jsonl"
+            write_registry(registry, {10: "ACTIVE", 20: "ACTIVE"})
+            tracker = ActiveScopeTracker(
+                registry_path=registry,
+                max_active_games=10,
+            )
+            tracker.reload()
+            baseline = FakeBaselineSource({10: [review("history-10", 100)]})
+            client = PerGameClient({10: [review("history-10", 100)], 20: []})
+            publisher = FakePublisher()
+
+            with ProducerState(root / "state.sqlite3") as state:
+                service = ReviewProducerService(
+                    state=state,
+                    client=client,
+                    publisher=publisher,
+                    max_pages=1,
+                    request_delay_seconds=0,
+                    baseline_source=baseline,
+                )
+                service.poll_game(10)
+                calls_before_removal = len(client.calls)
+
+                write_registry(registry, {10: "PAUSED", 20: "ACTIVE"})
+                reduced = tracker.reload()
+                for entry in reduced.entries:
+                    service.poll_game(entry.appid)
+
+                self.assertEqual((10,), reduced.removed_appids)
+                self.assertNotIn(
+                    10,
+                    [appid for appid, _cursor in client.calls[calls_before_removal:]],
+                )
+                self.assertTrue(state.is_initialized(10))
+                self.assertTrue(state.has_seen(10, "history-10"))
+
+    def test_scope_limit_refuses_expansion_without_replacing_current_scope(self):
+        with tempfile.TemporaryDirectory() as directory:
+            registry = Path(directory) / "registry.jsonl"
+            write_registry(registry, {10: "ACTIVE", 20: "NEW"})
+            tracker = ActiveScopeTracker(
+                registry_path=registry,
+                max_active_games=1,
+            )
+            tracker.reload()
+            write_registry(registry, {10: "ACTIVE", 20: "ACTIVE"})
+
+            with self.assertRaisesRegex(ActiveScopeSafetyError, "exceeds"):
+                tracker.reload()
+
+            self.assertEqual((10,), tuple(entry.appid for entry in tracker.entries))
+
+    def test_registry_reload_failure_preserves_scope_and_producer_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            registry = root / "registry.jsonl"
+            write_registry(registry, {10: "ACTIVE"})
+            tracker = ActiveScopeTracker(
+                registry_path=registry,
+                max_active_games=10,
+            )
+            tracker.reload()
+
+            with ProducerState(root / "state.sqlite3") as state:
+                state.complete_bootstrap(
+                    10,
+                    [review("history-10", 100)],
+                    polled_at="2026-10-01T00:00:00+00:00",
+                )
+                registry.write_text("not-json\n", encoding="utf-8")
+
+                with self.assertRaises(Exception):
+                    tracker.reload()
+
+                self.assertEqual(
+                    (10,), tuple(entry.appid for entry in tracker.entries)
+                )
+                self.assertTrue(state.is_initialized(10))
+                self.assertTrue(state.has_seen(10, "history-10"))
 
 
 if __name__ == "__main__":

@@ -1,11 +1,11 @@
 collection	run_1	run_2
-game_metrics	50	50
+game_metrics	90	90
 genre_metrics	17	17
 playtime_metrics	5	5
 free_paid_metrics	2	2
-engagement_metrics	50	50
+engagement_metrics	90	90
 label_profile	1	1
 platform_metrics	3	3
-category_metrics	59	59
+category_metrics	61	61
 purchase_metrics	2	2
 MONGODB IDEMPOTENCY: PASS

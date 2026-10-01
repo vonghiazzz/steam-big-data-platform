@@ -53,6 +53,14 @@ class DiscoverySchedulePolicy:
 
 
 @dataclass(frozen=True)
+class CatalogRefreshPolicy:
+    enabled: bool
+    page_size: int
+    max_pages: int
+    request_delay_seconds: float
+
+
+@dataclass(frozen=True)
 class RetryPolicy:
     max_attempts: int
     exponential_backoff: bool
@@ -64,6 +72,7 @@ class DiscoveryPolicy:
     qualification: QualificationPolicy
     onboarding: OnboardingPolicy
     discovery: DiscoverySchedulePolicy
+    catalog_refresh: CatalogRefreshPolicy
     retry: RetryPolicy
 
 
@@ -120,6 +129,9 @@ def load_discovery_policy(
     )
     onboarding = _require_mapping(root.get("onboarding"), "onboarding")
     discovery = _require_mapping(root.get("discovery"), "discovery")
+    catalog_refresh = _require_mapping(
+        root.get("catalog_refresh"), "catalog_refresh"
+    )
     retry = _require_mapping(root.get("retry"), "retry")
 
     min_playtime = qualification.get("min_playtime_minutes")
@@ -166,6 +178,21 @@ def load_discovery_policy(
             frequency=_require_non_empty_string(
                 discovery.get("frequency"), "discovery.frequency"
             ).upper(),
+        ),
+        catalog_refresh=CatalogRefreshPolicy(
+            enabled=_require_bool(
+                catalog_refresh.get("enabled"), "catalog_refresh.enabled"
+            ),
+            page_size=_require_positive_int(
+                catalog_refresh.get("page_size"), "catalog_refresh.page_size"
+            ),
+            max_pages=_require_positive_int(
+                catalog_refresh.get("max_pages"), "catalog_refresh.max_pages"
+            ),
+            request_delay_seconds=_require_non_negative_number(
+                catalog_refresh.get("request_delay_seconds"),
+                "catalog_refresh.request_delay_seconds",
+            ),
         ),
         retry=RetryPolicy(
             max_attempts=_require_positive_int(
@@ -321,6 +348,16 @@ def _require_non_negative_int(value: Any, field: str) -> int:
     if isinstance(value, bool) or not isinstance(value, int) or value < 0:
         raise ValueError(f"{field} must be a non-negative integer")
     return value
+
+
+def _require_non_negative_number(value: Any, field: str) -> float:
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, float))
+        or value < 0
+    ):
+        raise ValueError(f"{field} must be a non-negative number")
+    return float(value)
 
 
 def _require_non_empty_string(value: Any, field: str) -> str:

@@ -1,0 +1,51 @@
+model	feature	value
+logistic_regression	log1p_playtime_at_review_missing	-1.6224451336
+logistic_regression	category=Includes Source SDK	1.1369448349
+logistic_regression	genre=Indie	1.0240399583
+logistic_regression	category=Steam Turn Notifications	1.0164392121
+logistic_regression	category=Steam Timeline	-1.0031839550
+logistic_regression	category=Captions available	0.8744609533
+logistic_regression	category=Commentary available	0.8722577466
+logistic_regression	category=HDR available	0.8389651913
+logistic_regression	category=Chat Text-to-speech	-0.8096719900
+logistic_regression	category=Remote Play Together	0.7708489913
+logistic_regression	category=SteamVR Collectibles	-0.6588534556
+logistic_regression	category=VR Support	0.5988824062
+logistic_regression	category=#category_contrast_controls	-0.5697632559
+logistic_regression	category=#category_playable_at_your_own_pace	-0.5697632559
+logistic_regression	genre=Animation & Modeling	0.4891290285
+logistic_regression	genre=Design & Illustration	0.4891290285
+logistic_regression	genre=Photo Editing	0.4891290285
+logistic_regression	genre=Utilities	0.4891290285
+logistic_regression	category=Mouse Only Option	-0.4697758387
+logistic_regression	category=Online PvP	-0.4559193064
+logistic_regression	platform_linux_numeric_imputed	0.4506186813
+logistic_regression	category=Shared/Split Screen PvP	-0.4410207893
+logistic_regression	category=Cross-Platform Multiplayer	-0.4365812130
+logistic_regression	category=Steam Leaderboards	0.4123846689
+logistic_regression	category=Remote Play on Tablet	0.3585231354
+random_forest	genre=Indie	0.0749971174
+random_forest	log1p_playtime_at_review_imputed	0.0745765067
+random_forest	log1p_price_imputed	0.0596398116
+random_forest	platform_mac_numeric_imputed	0.0576146147
+random_forest	category=Online PvP	0.0513745551
+random_forest	category=Remote Play on Tablet	0.0492658704
+random_forest	category=In-App Purchases	0.0461933698
+random_forest	category=PvP	0.0408002275
+random_forest	category=Chat Text-to-speech	0.0296653015
+random_forest	category=Steam Cloud	0.0237092244
+random_forest	category=Includes level editor	0.0227429596
+random_forest	category=Family Sharing	0.0226923125
+random_forest	category=Remote Play Together	0.0157204880
+random_forest	category=Cross-Platform Multiplayer	0.0153860966
+random_forest	platform_linux_numeric_imputed	0.0150946513
+random_forest	category=Single-player	0.0149167472
+random_forest	received_for_free_numeric_imputed	0.0148390160
+random_forest	category=DualShock Controller Support	0.0147353563
+random_forest	category=Multi-player	0.0130221014
+random_forest	category=Remote Play on TV	0.0123110691
+random_forest	category=DualSense Controller Support	0.0117529650
+random_forest	genre=Action	0.0115609391
+random_forest	category=Online Co-op	0.0114830012
+random_forest	category=MMO	0.0110222323
+random_forest	category=Playable without Timed Input	0.0105186870
