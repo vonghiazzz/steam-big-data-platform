@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
@@ -35,7 +36,6 @@ from .paths import (
 )
 from .refresh_catalog import refresh_catalog
 from .registry import (
-    STATUS_QUEUED,
     OnboardingPlan,
     RegistryEntry,
     build_onboarding_plan,
@@ -289,6 +289,7 @@ def run_control_plane(
     current_date: date | None = None,
     run_timestamp: str | None = None,
     evaluator: Evaluator = evaluate_qualification,
+    max_active_games: int = 100,
 ) -> DiscoveryControlPlaneResult:
     qualification = qualify_candidates(
         candidate_evidence,
@@ -313,9 +314,7 @@ def run_control_plane(
         policy.onboarding,
         policy_version=policy.version,
         run_timestamp=run_timestamp,
-        existing_queued_count=sum(
-            entry.status == STATUS_QUEUED for entry in seeded_registry.values()
-        ),
+        max_active_games=max_active_games,
     )
     report = DiscoveryRunReport(
         candidate_count=qualification.candidate_count,
@@ -367,12 +366,19 @@ def main() -> None:
     parser.add_argument("--refresh-max-pages", type=int, default=None)
     parser.add_argument("--refresh-delay", type=float, default=None)
     parser.add_argument(
+        "--max-active-games",
+        type=int,
+        default=int(os.getenv("STREAM_MAX_ACTIVE_GAMES", "100")),
+    )
+    parser.add_argument(
         "--as-of-date",
         type=date.fromisoformat,
         default=None,
         help="Optional YYYY-MM-DD date for reproducible release-age evaluation",
     )
     args = parser.parse_args()
+    if args.max_active_games <= 0:
+        parser.error("--max-active-games must be positive")
 
     policy = load_discovery_policy(args.policy_path)
     if args.refresh_catalog:
@@ -408,6 +414,7 @@ def main() -> None:
         policy,
         current_date=args.as_of_date,
         run_timestamp=run_timestamp,
+        max_active_games=args.max_active_games,
     )
 
     reconciled_queue = reconcile_onboarding_queue(

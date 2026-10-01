@@ -16,6 +16,12 @@ REVIEW_PROBE_PATH = CATALOG_ROOT / "review_probe.jsonl"
 CATALOG_REFRESH_STATE_PATH = (
     DISCOVERY_STATE_ROOT / "catalog_refresh_v1.json"
 )
+DISCOVERY_SCHEDULER_STATE_PATH = (
+    DISCOVERY_STATE_ROOT / "scheduler_v1.json"
+)
+DISCOVERY_SCHEDULER_LOCK_PATH = (
+    DISCOVERY_STATE_ROOT / "scheduler_v1.lock"
+)
 
 INITIAL_SNAPSHOT_PATH = RAW_ROOT / "selected_50_games.jsonl"
 REGISTRY_ROOT = RAW_ROOT / "registry"

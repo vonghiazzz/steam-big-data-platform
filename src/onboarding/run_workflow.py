@@ -95,6 +95,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--refresh-page-size", type=int, default=None)
     parser.add_argument("--refresh-max-pages", type=int, default=None)
     parser.add_argument("--refresh-delay", type=float, default=None)
+    parser.add_argument(
+        "--max-active-games",
+        type=int,
+        default=int(os.getenv("STREAM_MAX_ACTIVE_GAMES", "100")),
+    )
     parser.add_argument("--status", action="store_true")
     parser.add_argument("--stop-after", choices=PHASES)
     return parser
@@ -143,6 +148,8 @@ class Workflow:
                     str(self.args.discovery_plan),
                     "--report-path",
                     str(self.args.discovery_report),
+                    "--max-active-games",
+                    str(self.args.max_active_games),
                 ]
                 if self.args.refresh_catalog:
                     command.append("--refresh-catalog")

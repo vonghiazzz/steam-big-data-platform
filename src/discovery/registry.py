@@ -105,11 +105,27 @@ class RegistryReconciliation:
 
 
 @dataclass(frozen=True)
+class OnboardingCapacity:
+    active_count: int
+    existing_queued_count: int
+    max_active_games: int
+    max_new_games_per_cycle: int
+    available_active_capacity: int
+    cycle_capacity: int
+    new_queue_capacity: int
+
+
+@dataclass(frozen=True)
 class OnboardingPlan:
     policy_version: int
     target_reviews_per_game: int
     qualified_count: int
     existing_active_count: int
+    existing_queued_count: int
+    max_active_games: int
+    available_active_capacity: int
+    cycle_capacity: int
+    new_queue_capacity: int
     new_count: int
     queued_count: int
     deferred_count: int
@@ -123,6 +139,11 @@ class OnboardingPlan:
             "target_reviews_per_game": self.target_reviews_per_game,
             "qualified_count": self.qualified_count,
             "existing_active_count": self.existing_active_count,
+            "existing_queued_count": self.existing_queued_count,
+            "max_active_games": self.max_active_games,
+            "available_active_capacity": self.available_active_capacity,
+            "cycle_capacity": self.cycle_capacity,
+            "new_queue_capacity": self.new_queue_capacity,
             "new_count": self.new_count,
             "queued_count": self.queued_count,
             "deferred_count": self.deferred_count,
@@ -239,7 +260,7 @@ def build_onboarding_plan(
     *,
     policy_version: int,
     run_timestamp: str | None = None,
-    existing_queued_count: int = 0,
+    max_active_games: int = 100,
 ) -> tuple[dict[int, RegistryEntry], OnboardingPlan]:
     candidates: dict[int, Mapping[str, Any]] = {}
     for candidate in qualified_candidates:
@@ -247,12 +268,13 @@ def build_onboarding_plan(
         candidates.setdefault(appid, candidate)
 
     pending = sorted(reconciliation.pending_new_appids)
-    available_slots = max(
-        0,
-        onboarding_policy.max_new_games_per_cycle - existing_queued_count,
+    capacity = calculate_onboarding_capacity(
+        reconciliation.registry,
+        max_active_games=max_active_games,
+        max_new_games_per_cycle=onboarding_policy.max_new_games_per_cycle,
     )
-    queued = pending[:available_slots]
-    deferred = pending[available_slots:]
+    queued = pending[: capacity.new_queue_capacity]
+    deferred = pending[capacity.new_queue_capacity :]
 
     registry = dict(reconciliation.registry)
     for appid in queued:
@@ -277,9 +299,12 @@ def build_onboarding_plan(
         policy_version=policy_version,
         target_reviews_per_game=onboarding_policy.target_reviews_per_game,
         qualified_count=len(candidates),
-        existing_active_count=len(
-            reconciliation.existing_active_appids
-        ),
+        existing_active_count=capacity.active_count,
+        existing_queued_count=capacity.existing_queued_count,
+        max_active_games=capacity.max_active_games,
+        available_active_capacity=capacity.available_active_capacity,
+        cycle_capacity=capacity.cycle_capacity,
+        new_queue_capacity=capacity.new_queue_capacity,
         new_count=len(pending),
         queued_count=len(queued),
         deferred_count=len(deferred),
@@ -288,6 +313,41 @@ def build_onboarding_plan(
         queued_games=queued_games,
     )
     return registry, plan
+
+
+def calculate_onboarding_capacity(
+    registry: Mapping[int, RegistryEntry],
+    *,
+    max_active_games: int,
+    max_new_games_per_cycle: int,
+) -> OnboardingCapacity:
+    """Calculate bounded onboarding capacity including QUEUED reservations."""
+    if max_active_games <= 0:
+        raise ValueError("max_active_games must be positive")
+    if max_new_games_per_cycle <= 0:
+        raise ValueError("max_new_games_per_cycle must be positive")
+
+    active_count = sum(
+        entry.status == STATUS_ACTIVE for entry in registry.values()
+    )
+    existing_queued_count = sum(
+        entry.status == STATUS_QUEUED for entry in registry.values()
+    )
+    available_active_capacity = max(0, max_active_games - active_count)
+    cycle_capacity = min(
+        max_new_games_per_cycle,
+        available_active_capacity,
+    )
+    new_queue_capacity = max(0, cycle_capacity - existing_queued_count)
+    return OnboardingCapacity(
+        active_count=active_count,
+        existing_queued_count=existing_queued_count,
+        max_active_games=max_active_games,
+        max_new_games_per_cycle=max_new_games_per_cycle,
+        available_active_capacity=available_active_capacity,
+        cycle_capacity=cycle_capacity,
+        new_queue_capacity=new_queue_capacity,
+    )
 
 
 def reconcile_onboarding_queue(
