@@ -276,14 +276,27 @@ def _validate_numeric_document(collection_name: str, document: Mapping) -> None:
             )
 
 
-def validate_database(database) -> tuple[dict[str, int], dict[str, int]]:
+def validate_database(
+    database,
+    expected_counts: Mapping[str, int] | None = None,
+    expected_reviews: int = 25_000,
+    expected_games: int = 50,
+) -> tuple[dict[str, int], dict[str, int]]:
+    if expected_counts is None:
+        expected_counts = {
+            name: spec.expected_count
+            for name, spec in COLLECTION_SPECS.items()
+        }
+    if set(expected_counts) != set(COLLECTION_SPECS):
+        raise ValueError("Expected MongoDB counts must cover all serving collections")
+
     counts: dict[str, int] = {}
     for name, spec in COLLECTION_SPECS.items():
         documents = list(database[name].find({}))
         counts[name] = len(documents)
-        if counts[name] != spec.expected_count:
+        if counts[name] != expected_counts[name]:
             raise RuntimeError(
-                f"MongoDB {name} count {counts[name]} != {spec.expected_count}"
+                f"MongoDB {name} count {counts[name]} != {expected_counts[name]}"
             )
         identities = [document["_id"] for document in documents]
         if len(set(identities)) != len(identities):
@@ -296,16 +309,20 @@ def validate_database(database) -> tuple[dict[str, int], dict[str, int]]:
     profile = database["label_profile"].find_one(
         {"_id": "historical_baseline"}
     )
+    if profile is None:
+        raise RuntimeError("MongoDB label_profile is missing its baseline document")
     expected_profile = {
-        "total_rows": 25_000,
-        "positive_count": 18_321,
-        "negative_count": 6_679,
+        "total_rows": expected_reviews,
+        "unique_recommendationid": expected_reviews,
+        "distinct_appids": expected_games,
     }
     for field, expected in expected_profile.items():
         if profile.get(field) != expected:
             raise RuntimeError(
                 f"MongoDB label_profile {field}={profile.get(field)} != {expected}"
             )
+    if profile.get("positive_count", 0) + profile.get("negative_count", 0) != expected_reviews:
+        raise RuntimeError("MongoDB label_profile positive and negative totals do not reconcile")
 
     totals = {
         "reviews": profile["total_rows"],
@@ -329,8 +346,31 @@ def validate_database(database) -> tuple[dict[str, int], dict[str, int]]:
         ),
     }
     for field in ("game_reviews", "free_paid_reviews", "purchase_reviews"):
-        if totals[field] != 25_000:
-            raise RuntimeError(f"MongoDB {field}={totals[field]} != 25000")
+        if totals[field] != expected_reviews:
+            raise RuntimeError(
+                f"MongoDB {field}={totals[field]} != {expected_reviews}"
+            )
+    for collection_name in (
+        "game_metrics",
+        "free_paid_metrics",
+        "purchase_metrics",
+    ):
+        documents = database[collection_name].find(
+            {}, {"positive_reviews": 1, "negative_reviews": 1}
+        )
+        positive_total = sum(document["positive_reviews"] for document in documents)
+        documents = database[collection_name].find(
+            {}, {"positive_reviews": 1, "negative_reviews": 1}
+        )
+        negative_total = sum(document["negative_reviews"] for document in documents)
+        if positive_total != profile["positive_count"]:
+            raise RuntimeError(
+                f"MongoDB {collection_name} positive total does not match label_profile"
+            )
+        if negative_total != profile["negative_count"]:
+            raise RuntimeError(
+                f"MongoDB {collection_name} negative total does not match label_profile"
+            )
     return counts, totals
 
 

@@ -15,9 +15,6 @@ STEAM BRONZE VERIFICATION  source=hdfs
   [OK] records whose appid != file name = 0
   [OK] unique review.recommendationid = 25000 (missing=0, duplicates=0)
   info: voted_up true=18321 false=6679 other=0; empty review text=98
-  [OK] positive/negative counts match validation_report.json
-  [OK] empty-text count matches validation_report.json
-  [OK] per-game counts match validation_report.json
 
 == byte-level integrity (HDFS vs local copy) ==
   [OK] md5 identical for games + 50 review files (mismatch: none)

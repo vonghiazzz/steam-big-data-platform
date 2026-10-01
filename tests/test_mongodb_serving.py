@@ -8,6 +8,7 @@ from src.serving.mongodb_loader import (
     build_documents,
     natural_id,
     to_python_native,
+    validate_database,
 )
 
 
@@ -17,6 +18,35 @@ class FakeRow:
 
     def asDict(self, recursive=False):
         return dict(self.values)
+
+
+class FakeCollection:
+    def __init__(self, documents):
+        self.documents = documents
+
+    def find(self, query, projection=None):
+        return list(self.documents)
+
+    def find_one(self, query):
+        return next(
+            (
+                document
+                for document in self.documents
+                if all(document.get(key) == value for key, value in query.items())
+            ),
+            None,
+        )
+
+
+class FakeDatabase:
+    def __init__(self, collections):
+        self.collections = {
+            name: FakeCollection(documents)
+            for name, documents in collections.items()
+        }
+
+    def __getitem__(self, name):
+        return self.collections[name]
 
 
 class MongoDBServingV1Test(unittest.TestCase):
@@ -111,6 +141,124 @@ class MongoDBServingV1Test(unittest.TestCase):
         ]
         with self.assertRaisesRegex(ValueError, "duplicate natural key"):
             build_documents("genre_metrics", rows)
+
+    def test_validate_database_accepts_source_derived_counts(self):
+        profile = {
+            "_id": "historical_baseline",
+            "total_rows": 100,
+            "unique_recommendationid": 100,
+            "distinct_appids": 1,
+            "positive_count": 60,
+            "negative_count": 40,
+        }
+        documents = {
+            "game_metrics": [
+                {
+                    "_id": 730,
+                    "appid": 730,
+                    "review_count": 100,
+                    "positive_reviews": 60,
+                    "negative_reviews": 40,
+                    "recommendation_rate": 0.6,
+                }
+            ],
+            "genre_metrics": [
+                {
+                    "_id": "Action",
+                    "genre": "Action",
+                    "review_count": 100,
+                    "positive_reviews": 60,
+                    "negative_reviews": 40,
+                    "recommendation_rate": 0.6,
+                }
+            ],
+            "playtime_metrics": [
+                {
+                    "_id": "0-10",
+                    "playtime_bucket": "0-10",
+                    "review_count": 100,
+                    "positive_reviews": 60,
+                    "negative_reviews": 40,
+                    "recommendation_rate": 0.6,
+                }
+            ],
+            "free_paid_metrics": [
+                {
+                    "_id": "FREE",
+                    "game_type": "FREE",
+                    "review_count": 100,
+                    "positive_reviews": 60,
+                    "negative_reviews": 40,
+                    "recommendation_rate": 0.6,
+                }
+            ],
+            "engagement_metrics": [
+                {
+                    "_id": 730,
+                    "appid": 730,
+                    "review_count": 100,
+                    "positive_reviews": 60,
+                    "recommendation_rate": 0.6,
+                }
+            ],
+            "label_profile": [profile],
+            "platform_metrics": [
+                {
+                    "_id": "WINDOWS",
+                    "platform": "WINDOWS",
+                    "review_count": 100,
+                    "positive_reviews": 60,
+                    "negative_reviews": 40,
+                    "recommendation_rate": 0.6,
+                }
+            ],
+            "category_metrics": [
+                {
+                    "_id": "Action",
+                    "category": "Action",
+                    "review_count": 100,
+                    "positive_reviews": 60,
+                    "negative_reviews": 40,
+                    "recommendation_rate": 0.6,
+                }
+            ],
+            "purchase_metrics": [
+                {
+                    "_id": "STEAM_PURCHASE",
+                    "purchase_source": "STEAM_PURCHASE",
+                    "review_count": 100,
+                    "positive_reviews": 60,
+                    "negative_reviews": 40,
+                    "recommendation_rate": 0.6,
+                }
+            ],
+        }
+        database = FakeDatabase(documents)
+        expected_counts = {name: 1 for name in COLLECTION_SPECS}
+
+        counts, totals = validate_database(
+            database,
+            expected_counts=expected_counts,
+            expected_reviews=100,
+            expected_games=1,
+        )
+
+        self.assertEqual(counts, expected_counts)
+        self.assertEqual(totals["reviews"], 100)
+        self.assertEqual(totals["positive"], 60)
+        self.assertEqual(totals["negative"], 40)
+
+    def test_validate_database_rejects_inconsistent_source_counts(self):
+        database = FakeDatabase({name: [] for name in COLLECTION_SPECS})
+        expected_counts = {name: 1 for name in COLLECTION_SPECS}
+
+        with self.assertRaisesRegex(RuntimeError, "game_metrics count 0 != 1"):
+            validate_database(
+                database,
+                expected_counts=expected_counts,
+                expected_reviews=100,
+                expected_games=1,
+            )
 
 
 if __name__ == "__main__":

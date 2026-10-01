@@ -15,22 +15,22 @@ The platform currently stops at MongoDB. A Backend API, frontend dashboard, and 
 
 ## Current Status
 
-| Component | Status | Purpose |
-|---|---|---|
-| Committed historical snapshot | Implemented | 50 games and 25,000 reviews for the project baseline |
-| HDFS Bronze upload and verification | Implemented | Load and verify immutable raw JSONL |
-| PySpark Silver | Implemented | Clean, type, validate, and deduplicate games/reviews |
-| Gold Base | Implemented | Join games and reviews into one review-level analytical dataset |
-| Spark Gold Analytics | Implemented | Produce nine reporting aggregates |
-| Visualization | Implemented | Generate six charts from Gold Analytics |
-| Hadoop Streaming MapReduce | Implemented | Independently validate recommendation metrics |
-| Kafka review producer | Implemented | Poll for and publish newly observed reviews |
-| Spark Structured Streaming | Implemented | Validate, deduplicate, archive, and enrich review events |
-| MongoDB Historical Serving V1 | Implemented | Serve Gold Analytics snapshots |
-| MongoDB Realtime Serving V2 | Implemented | Serve recent reviews and windowed realtime metrics |
-| Backend API | Not implemented — next | Read-only application interface over MongoDB |
-| Frontend dashboard | Not implemented — next | Visual and realtime consumer of the Backend API |
-| MLlib | Future | Additional modelling over Gold data |
+| Component                           | Status                 | Purpose                                                         |
+| ----------------------------------- | ---------------------- | --------------------------------------------------------------- |
+| Committed historical snapshot       | Implemented            | 50 games and 25,000 reviews for the project baseline            |
+| HDFS Bronze upload and verification | Implemented            | Load and verify immutable raw JSONL                             |
+| PySpark Silver                      | Implemented            | Clean, type, validate, and deduplicate games/reviews            |
+| Gold Base                           | Implemented            | Join games and reviews into one review-level analytical dataset |
+| Spark Gold Analytics                | Implemented            | Produce nine reporting aggregates                               |
+| Visualization                       | Implemented            | Generate six charts from Gold Analytics                         |
+| Hadoop Streaming MapReduce          | Implemented            | Independently validate recommendation metrics                   |
+| Kafka review producer               | Implemented            | Poll for and publish newly observed reviews                     |
+| Spark Structured Streaming          | Implemented            | Validate, deduplicate, archive, and enrich review events        |
+| MongoDB Historical Serving V1       | Implemented            | Serve Gold Analytics snapshots                                  |
+| MongoDB Realtime Serving V2         | Implemented            | Serve recent reviews and windowed realtime metrics              |
+| Backend API                         | Not implemented — next | Read-only application interface over MongoDB                    |
+| Frontend dashboard                  | Not implemented — next | Visual and realtime consumer of the Backend API                 |
+| MLlib                               | Future                 | Additional modelling over Gold data                             |
 
 ## Architecture
 
@@ -79,12 +79,12 @@ Data ownership is deliberately separated:
 
 The medallion layers are:
 
-| Layer | Meaning |
-|---|---|
-| Bronze | Raw, replayable historical records and archived stream events |
-| Silver | Cleaned, typed, validated, and deduplicated data |
-| Gold Base | Review-level joined dataset suitable for analytics or future ML |
-| Gold Analytics | Precomputed aggregate datasets for reporting and serving |
+| Layer          | Meaning                                                         |
+| -------------- | --------------------------------------------------------------- |
+| Bronze         | Raw, replayable historical records and archived stream events   |
+| Silver         | Cleaned, typed, validated, and deduplicated data                |
+| Gold Base      | Review-level joined dataset suitable for analytics or future ML |
+| Gold Analytics | Precomputed aggregate datasets for reporting and serving        |
 
 `/steam/gold/base` contains one row per historical review. `/steam/gold/analytics/*` contains aggregates derived from that base. Historical Serving V1 copies those aggregates to MongoDB; Realtime Serving V2 maintains separate incremental views.
 
@@ -92,14 +92,14 @@ The medallion layers are:
 
 Repository evidence confirms this project snapshot, not global Steam totals:
 
-| Check | Expected |
-|---|---:|
-| Games | 50 |
-| Reviews | 25,000 |
-| Unique `recommendationid` | 25,000 |
-| Positive reviews | 18,321 |
-| Negative reviews | 6,679 |
-| Gold Base grain | One row per review |
+| Check                     |           Expected |
+| ------------------------- | -----------------: |
+| Games                     |                 50 |
+| Reviews                   |             25,000 |
+| Unique `recommendationid` |             25,000 |
+| Positive reviews          |             18,321 |
+| Negative reviews          |              6,679 |
+| Gold Base grain           | One row per review |
 
 ## Implemented Components
 
@@ -168,21 +168,21 @@ cp .env.example .env
 
 Replace every `CHANGE_ME` value in `.env`. Do not commit `.env`, credentials, or private endpoints. Common local values are:
 
-| Variable | Typical local value or meaning |
-|---|---|
-| `KAFKA_HOST_PORT` | `9092` |
-| `KAFKA_BOOTSTRAP_SERVERS` | `localhost:9092` |
-| `KAFKA_TOPIC` | `steam_events` |
-| `KAFKA_TOPIC_PARTITIONS` | `3` |
-| `KAFKA_RETENTION_MS` | `86400000` |
-| `KAFKA_RETENTION_BYTES` | `536870912` |
-| `KAFKA_LOG_SEGMENT_BYTES` | `67108864` |
-| `KAFKA_COMPRESSION_TYPE` | `gzip` |
-| `HADOOP_NAMENODE_CONTAINER` | `bda501-namenode`, or the actual container name |
-| `HDFS_DEFAULT_FS` | An HDFS URI reachable by the process running Spark, such as `hdfs://<namenode-host>:8020` |
-| `STREAM_AVAILABLE_NOW` | `false` for continuous mode; `true` for bounded processing |
-| `MONGO_URI` | `mongodb://localhost:27017` |
-| `MONGO_DATABASE` | `steam_analytics` |
+| Variable                    | Typical local value or meaning                                                            |
+| --------------------------- | ----------------------------------------------------------------------------------------- |
+| `KAFKA_HOST_PORT`           | `9092`                                                                                    |
+| `KAFKA_BOOTSTRAP_SERVERS`   | `localhost:9092`                                                                          |
+| `KAFKA_TOPIC`               | `steam_events`                                                                            |
+| `KAFKA_TOPIC_PARTITIONS`    | `3`                                                                                       |
+| `KAFKA_RETENTION_MS`        | `86400000`                                                                                |
+| `KAFKA_RETENTION_BYTES`     | `536870912`                                                                               |
+| `KAFKA_LOG_SEGMENT_BYTES`   | `67108864`                                                                                |
+| `KAFKA_COMPRESSION_TYPE`    | `gzip`                                                                                    |
+| `HADOOP_NAMENODE_CONTAINER` | `bda501-namenode`, or the actual container name                                           |
+| `HDFS_DEFAULT_FS`           | An HDFS URI reachable by the process running Spark, such as `hdfs://<namenode-host>:8020` |
+| `STREAM_AVAILABLE_NOW`      | `false` for continuous mode; `true` for bounded processing                                |
+| `MONGO_URI`                 | `mongodb://localhost:27017`                                                               |
+| `MONGO_DATABASE`            | `steam_analytics`                                                                         |
 
 Complete the remaining `CHANGE_ME` entries with the repository's safe local defaults unless the environment requires different limits:
 
@@ -346,6 +346,8 @@ This runner starts MongoDB if needed, reads all nine HDFS Gold Analytics dataset
 
 MongoDB is only the serving copy; `/steam/gold/analytics/*` remains the historical analytical source of truth.
 
+The serving checks default to the validated project snapshot of 25,000 reviews across 50 games. Confirm that all nine Gold Analytics datasets exist and that `label_profile` reports 25,000 unique reviews before running the loader.
+
 ## 9. Run Realtime Review Streaming
 
 The implemented realtime event type is **`REVIEW_CREATED` only**:
@@ -441,51 +443,51 @@ The test suites use temporary/local fixtures unless their own setup explicitly s
 
 ## HDFS Paths
 
-| Data | Path |
-|---|---|
-| Bronze games | `/steam/bronze/games` |
-| Bronze historical reviews | `/steam/bronze/reviews` |
-| Bronze stream archive | `/steam/bronze/stream_events` |
-| Invalid review events | `/steam/quarantine/review_events` |
-| Silver games | `/steam/silver/games` |
-| Silver historical reviews | `/steam/silver/reviews` |
-| Incremental Silver reviews | `/steam/silver/reviews_incremental_v1` |
-| Gold Base | `/steam/gold/base` |
-| Incremental Gold Base | `/steam/gold/base_incremental_v1` |
-| Gold Analytics | `/steam/gold/analytics/<dataset>` |
-| MapReduce output | `/steam/mapreduce/game_recommendation_metrics` |
-| Streaming checkpoints | `/steam/checkpoints/review_*_v1` |
+| Data                       | Path                                                                                            |
+| -------------------------- | ----------------------------------------------------------------------------------------------- |
+| Bronze games               | `/steam/bronze/games`                                                                           |
+| Bronze historical reviews  | `/steam/bronze/reviews`                                                                         |
+| Bronze stream archive      | `/steam/bronze/stream_events`                                                                   |
+| Invalid review events      | `/steam/quarantine/review_events`                                                               |
+| Silver games               | `/steam/silver/games`                                                                           |
+| Silver historical reviews  | `/steam/silver/reviews`                                                                         |
+| Incremental Silver reviews | `/steam/silver/reviews_incremental_v1`                                                          |
+| Gold Base                  | `/steam/gold/base`                                                                              |
+| Incremental Gold Base      | `/steam/gold/base_incremental_v1`                                                               |
+| Gold Analytics             | `/steam/gold/analytics/<dataset>`                                                               |
+| MapReduce output           | `/steam/mapreduce/game_recommendation_metrics`                                                  |
+| Streaming checkpoints      | `/steam/checkpoints/review_*_v1`                                                                |
 | MongoDB stream checkpoints | `/steam/checkpoints/mongodb/recent_reviews`, `/steam/checkpoints/mongodb/realtime_game_metrics` |
 
 ## MongoDB Collections
 
 ### Historical Serving V1
 
-| Collection | Natural key | Purpose | Validated baseline documents |
-|---|---|---|---:|
-| `game_metrics` | `appid` | Review metrics by game | 50 |
-| `genre_metrics` | `genre` | Metrics by genre | 17 |
-| `playtime_metrics` | `playtime_bucket` | Metrics by playtime band | 5 |
-| `free_paid_metrics` | `game_type` | Free versus paid comparison | 2 |
-| `engagement_metrics` | `appid` | Engagement measures by game | 50 |
-| `label_profile` | Fixed snapshot key | Historical label distribution | 1 |
-| `platform_metrics` | `platform` | Metrics by supported platform | 3 |
-| `category_metrics` | `category` | Metrics by Steam category | 59 |
-| `purchase_metrics` | `purchase_source` | Steam purchase-source metrics | 2 |
+| Collection           | Natural key        | Purpose                       | Validated baseline documents |
+| -------------------- | ------------------ | ----------------------------- | ---------------------------: |
+| `game_metrics`       | `appid`            | Review metrics by game        |                           50 |
+| `genre_metrics`      | `genre`            | Metrics by genre              |                           17 |
+| `playtime_metrics`   | `playtime_bucket`  | Metrics by playtime band      |                            5 |
+| `free_paid_metrics`  | `game_type`        | Free versus paid comparison   |                            2 |
+| `engagement_metrics` | `appid`            | Engagement measures by game   |                           50 |
+| `label_profile`      | Fixed snapshot key | Historical label distribution |                            1 |
+| `platform_metrics`   | `platform`         | Metrics by supported platform |                            3 |
+| `category_metrics`   | `category`         | Metrics by Steam category     |                           59 |
+| `purchase_metrics`   | `purchase_source`  | Steam purchase-source metrics |                            2 |
 
 ### Realtime Serving V2
 
-| Collection | Natural key | Purpose |
-|---|---|---|
-| `recent_reviews` | `recommendationid` | Latest incremental review feed |
+| Collection              | Natural key                | Purpose                             |
+| ----------------------- | -------------------------- | ----------------------------------- |
+| `recent_reviews`        | `recommendationid`         | Latest incremental review feed      |
 | `realtime_game_metrics` | `appid` + window start/end | One-hour event-time metrics by game |
 
 ## Continuous vs Bounded Streaming
 
-| Setting | Behaviour | Use |
-|---|---|---|
-| `STREAM_AVAILABLE_NOW=false` | Keeps waiting for future Kafka data | Continuous local realtime mode |
-| `STREAM_AVAILABLE_NOW=true` | Processes currently available data and exits | Bounded smoke/catch-up validation |
+| Setting                      | Behaviour                                    | Use                               |
+| ---------------------------- | -------------------------------------------- | --------------------------------- |
+| `STREAM_AVAILABLE_NOW=false` | Keeps waiting for future Kafka data          | Continuous local realtime mode    |
+| `STREAM_AVAILABLE_NOW=true`  | Processes currently available data and exits | Bounded smoke/catch-up validation |
 
 An exited `availableNow` job is behaving as configured; it is not a continuous service. A small producer smoke run can use `bash scripts/run_review_producer.sh --once --max-games 2`, but production-style continuous polling must omit `--once`.
 
@@ -517,20 +519,20 @@ Evidence from the validated runs is stored under `evidence/`; it is a reproducib
 
 ## Troubleshooting
 
-| Symptom | Check |
-|---|---|
-| `.env` values fail parsing or connections | Replace every `CHANGE_ME`; keep fixture overrides unset |
-| NameNode is unavailable | Start the external Hadoop environment and verify `HADOOP_NAMENODE_CONTAINER` |
-| Spark cannot resolve HDFS | Set `HDFS_DEFAULT_FS` to an endpoint reachable from the process running Spark; do not reuse another machine's address |
-| HDFS write is denied | Verify `HADOOP_USER_NAME`, target ownership, and permissions before changing data |
-| Kafka topic is missing | Run `bash scripts/create_streaming_topic.sh` after Kafka is healthy |
-| Kafka connector cannot resolve | Check internet access and that the connector coordinate matches the installed Spark/Scala build |
-| MongoDB is unavailable | Check `docker compose -f compose.mongodb.yaml ps` and the `steam-mongodb` health status |
-| Historical serving says PyMongo is missing | Install `requirements.txt` into the Python selected by `PYTHON_BIN` |
-| Spark UI port 4040 is occupied | Spark may select another port; optionally add `--conf spark.ui.port=4041` to direct Spark commands |
-| Streaming exits after catching up | Set `STREAM_AVAILABLE_NOW=false` for continuous mode |
-| Producer cannot start | Provide the uncommitted ACTIVE registry and verify Steam/network access |
-| No new documents appear | First bootstrap can emit zero; Steam may have no reviews newer than producer state |
+| Symptom                                    | Check                                                                                                                 |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `.env` values fail parsing or connections  | Replace every `CHANGE_ME`; keep fixture overrides unset                                                               |
+| NameNode is unavailable                    | Start the external Hadoop environment and verify `HADOOP_NAMENODE_CONTAINER`                                          |
+| Spark cannot resolve HDFS                  | Set `HDFS_DEFAULT_FS` to an endpoint reachable from the process running Spark; do not reuse another machine's address |
+| HDFS write is denied                       | Verify `HADOOP_USER_NAME`, target ownership, and permissions before changing data                                     |
+| Kafka topic is missing                     | Run `bash scripts/create_streaming_topic.sh` after Kafka is healthy                                                   |
+| Kafka connector cannot resolve             | Check internet access and that the connector coordinate matches the installed Spark/Scala build                       |
+| MongoDB is unavailable                     | Check `docker compose -f compose.mongodb.yaml ps` and the `steam-mongodb` health status                               |
+| Historical serving says PyMongo is missing | Install `requirements.txt` into the Python selected by `PYTHON_BIN`                                                   |
+| Spark UI port 4040 is occupied             | Spark may select another port; optionally add `--conf spark.ui.port=4041` to direct Spark commands                    |
+| Streaming exits after catching up          | Set `STREAM_AVAILABLE_NOW=false` for continuous mode                                                                  |
+| Producer cannot start                      | Provide the uncommitted ACTIVE registry and verify Steam/network access                                               |
+| No new documents appear                    | First bootstrap can emit zero; Steam may have no reviews newer than producer state                                    |
 
 ## Current Limitations
 
@@ -560,21 +562,21 @@ Start with read-only endpoints, pagination, input validation, stable response DT
 
 ## Suggested Backend API Contract
 
-| Endpoint | MongoDB source | Intended response |
-|---|---|---|
-| `GET /api/health` | MongoDB ping | Service/database health |
-| `GET /api/analytics/games` | `game_metrics` | Paginated game metrics |
-| `GET /api/analytics/games/top` | `game_metrics` | Ranked games by a validated metric |
-| `GET /api/analytics/genres` | `genre_metrics` | Genre aggregates |
-| `GET /api/analytics/playtime` | `playtime_metrics` | Playtime-band aggregates |
-| `GET /api/analytics/free-paid` | `free_paid_metrics` | Free/paid comparison |
-| `GET /api/analytics/platforms` | `platform_metrics` | Platform aggregates |
-| `GET /api/analytics/categories` | `category_metrics` | Category aggregates |
-| `GET /api/analytics/purchase` | `purchase_metrics` | Purchase-source aggregates |
-| `GET /api/realtime/reviews` | `recent_reviews` | Latest incremental reviews |
-| `GET /api/realtime/reviews?appid=<appid>` | `recent_reviews` | Latest reviews for one game |
-| `GET /api/realtime/games` | `realtime_game_metrics` | Latest per-game windows |
-| `GET /api/realtime/games/<appid>` | `realtime_game_metrics` | Windows for one game |
+| Endpoint                                  | MongoDB source          | Intended response                  |
+| ----------------------------------------- | ----------------------- | ---------------------------------- |
+| `GET /api/health`                         | MongoDB ping            | Service/database health            |
+| `GET /api/analytics/games`                | `game_metrics`          | Paginated game metrics             |
+| `GET /api/analytics/games/top`            | `game_metrics`          | Ranked games by a validated metric |
+| `GET /api/analytics/genres`               | `genre_metrics`         | Genre aggregates                   |
+| `GET /api/analytics/playtime`             | `playtime_metrics`      | Playtime-band aggregates           |
+| `GET /api/analytics/free-paid`            | `free_paid_metrics`     | Free/paid comparison               |
+| `GET /api/analytics/platforms`            | `platform_metrics`      | Platform aggregates                |
+| `GET /api/analytics/categories`           | `category_metrics`      | Category aggregates                |
+| `GET /api/analytics/purchase`             | `purchase_metrics`      | Purchase-source aggregates         |
+| `GET /api/realtime/reviews`               | `recent_reviews`        | Latest incremental reviews         |
+| `GET /api/realtime/reviews?appid=<appid>` | `recent_reviews`        | Latest reviews for one game        |
+| `GET /api/realtime/games`                 | `realtime_game_metrics` | Latest per-game windows            |
+| `GET /api/realtime/games/<appid>`         | `realtime_game_metrics` | Windows for one game               |
 
 Frontend development should follow the API. Suggested dashboard views include top games by recommendation rate, genre recommendation, playtime versus recommendation, free versus paid comparison, positive/negative distribution, a recent-review feed, and one-hour realtime recommendation metrics.
 

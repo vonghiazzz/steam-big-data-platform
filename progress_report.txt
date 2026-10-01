@@ -1,0 +1,185 @@
+================================================================================
+STEAM BIG DATA PIPELINE PROGRESS REPORT
+================================================================================
+
+[1] BRONZE LAYER
+
+Bronze Reviews Count:
+20400
+
+Bronze Games Count:
+50
+
+Bronze Reviews Schema:
+root
+ |-- appid: long (nullable = true)
+ |-- game_name: string (nullable = true)
+ |-- ingested_at: string (nullable = true)
+ |-- page_number: long (nullable = true)
+ |-- request_cursor: string (nullable = true)
+ |-- review: struct (nullable = true)
+ |    |-- app_release_date: string (nullable = true)
+ |    |-- author: struct (nullable = true)
+ |    |    |-- avatar: string (nullable = true)
+ |    |    |-- deck_playtime_at_review: long (nullable = true)
+ |    |    |-- last_played: long (nullable = true)
+ |    |    |-- num_gammes_owned: long (nullable = true)
+ |    |    |-- num_reviews: long (nullable = true)
+ |    |    |-- persona_status: string (nullable = true)
+ |    |    |-- personaname: string (nullable = true)
+ |    |    |-- playtime_at_review: long (nullable = true)
+ |    |    |-- playtime_forever: long (nullable = true)
+ |    |    |-- playtime_last_two_weeks: long (nullable = true)
+ |    |    |-- profile_url: string (nullable = true)
+ |    |    |-- steamid: string (nullable = true)
+ |    |-- bBeWary: boolean (nullable = true)
+ |    |-- comment_count: long (nullable = true)
+ |    |-- developer_response: string (nullable = true)
+ |    |-- hardware: struct (nullable = true)
+ |    |    |-- adapter_description: string (nullable = true)
+ |    |    |-- cpu_name: string (nullable = true)
+ |    |    |-- os: string (nullable = true)
+ |    |    |-- system_ram: string (nullable = true)
+ |    |    |-- vram_size: long (nullable = true)
+ |    |-- language: string (nullable = true)
+ |    |-- primarily_steam_deck: boolean (nullable = true)
+ |    |-- reactions: array (nullable = true)
+ |    |    |-- element: struct (containsNull = true)
+ |    |    |    |-- count: long (nullable = true)
+ |    |    |    |-- reaction_type: long (nullable = true)
+ |    |-- received_for_free: boolean (nullable = true)
+ |    |-- recommendationid: string (nullable = true)
+ |    |-- refunded: boolean (nullable = true)
+ |    |-- review: string (nullable = true)
+ |    |-- steam_purchase: boolean (nullable = true)
+ |    |-- timestamp_created: long (nullable = true)
+ |    |-- timestamp_dev_responded: long (nullable = true)
+ |    |-- timestamp_updated: long (nullable = true)
+ |    |-- voted_up: boolean (nullable = true)
+ |    |-- votes_funny: long (nullable = true)
+ |    |-- votes_up: long (nullable = true)
+ |    |-- weighted_vote_score: string (nullable = true)
+ |    |-- written_during_early_access: boolean (nullable = true)
+
+
+================================================================================
+[2] SILVER LAYER
+
+Silver Count:
+20400
+
+Silver Schema:
+root
+ |-- appid: long (nullable = true)
+ |-- game_name: string (nullable = true)
+ |-- ingested_at: string (nullable = true)
+ |-- recommendationid: string (nullable = true)
+ |-- voted_up: boolean (nullable = true)
+ |-- recommendation_label: integer (nullable = true)
+ |-- steam_purchase: boolean (nullable = true)
+ |-- received_for_free: boolean (nullable = true)
+ |-- playtime_hours: double (nullable = true)
+ |-- language_clean: string (nullable = true)
+ |-- review_year: string (nullable = true)
+
+
+Sample Silver Data:
++-------+------------------------------------+--------------------------------+----------------+--------+--------------------+--------------+-----------------+------------------+--------------+-----------+
+|appid  |game_name                           |ingested_at                     |recommendationid|voted_up|recommendation_label|steam_purchase|received_for_free|playtime_hours    |language_clean|review_year|
++-------+------------------------------------+--------------------------------+----------------+--------+--------------------+--------------+-----------------+------------------+--------------+-----------+
+|1643320|S.T.A.L.K.E.R. 2: Heart of Chornobyl|2026-09-25T11:27:33.006501+00:00|236122782       |true    |1                   |true          |false            |67.9              |english       |2026       |
+|1643320|S.T.A.L.K.E.R. 2: Heart of Chornobyl|2026-09-25T11:27:33.006556+00:00|236120892       |false   |0                   |true          |false            |50.516666666666666|english       |2026       |
+|1643320|S.T.A.L.K.E.R. 2: Heart of Chornobyl|2026-09-25T11:27:33.006597+00:00|236110693       |false   |0                   |false         |false            |51.916666666666664|english       |2026       |
+|1643320|S.T.A.L.K.E.R. 2: Heart of Chornobyl|2026-09-25T11:27:33.006661+00:00|236106815       |true    |1                   |true          |false            |47.45             |english       |2026       |
+|1643320|S.T.A.L.K.E.R. 2: Heart of Chornobyl|2026-09-25T11:27:33.006692+00:00|236106602       |true    |1                   |false         |false            |35.083333333333336|english       |2026       |
++-------+------------------------------------+--------------------------------+----------------+--------+--------------------+--------------+-----------------+------------------+--------------+-----------+
+only showing top 5 rows
+
+
+================================================================================
+[3] DATA QUALITY
+
+Null Count:
++-----+---------+-----------+----------------+--------+--------------------+--------------+-----------------+--------------+--------------+-----------+
+|appid|game_name|ingested_at|recommendationid|voted_up|recommendation_label|steam_purchase|received_for_free|playtime_hours|language_clean|review_year|
++-----+---------+-----------+----------------+--------+--------------------+--------------+-----------------+--------------+--------------+-----------+
+|    0|        0|          0|               0|       0|                   0|             0|                0|           499|             0|          0|
++-----+---------+-----------+----------------+--------+--------------------+--------------+-----------------+--------------+--------------+-----------+
+
+
+Duplicate recommendationid:
+0
+
+Playtime Statistics:
++-------------------+-------------------+-------------------+
+|min(playtime_hours)|max(playtime_hours)|avg(playtime_hours)|
++-------------------+-------------------+-------------------+
+|0.08333333333333333| 21407.283333333333| 260.03440111887153|
++-------------------+-------------------+-------------------+
+
+
+================================================================================
+[4] GOLD LAYER
+
+Gold Count:
+20400
+
+Gold Schema:
+root
+ |-- appid: long (nullable = true)
+ |-- game_name: string (nullable = true)
+ |-- ingested_at: string (nullable = true)
+ |-- recommendationid: string (nullable = true)
+ |-- voted_up: boolean (nullable = true)
+ |-- recommendation_label: integer (nullable = true)
+ |-- steam_purchase: boolean (nullable = true)
+ |-- received_for_free: boolean (nullable = true)
+ |-- playtime_hours: double (nullable = true)
+ |-- language_clean: string (nullable = true)
+ |-- review_year: string (nullable = true)
+ |-- genres: array (nullable = true)
+ |    |-- element: string (containsNull = true)
+ |-- primary_genre: string (nullable = true)
+ |-- is_free: boolean (nullable = true)
+ |-- price: double (nullable = true)
+ |-- release_year: integer (nullable = true)
+ |-- overall_positive_rate: double (nullable = true)
+
+
+Gold Sample:
++-------+------------------------------------+--------------------------------+----------------+--------+--------------------+--------------+-----------------+------------------+--------------+-----------+------------------------+-------------+-------+-----+------------+---------------------+
+|appid  |game_name                           |ingested_at                     |recommendationid|voted_up|recommendation_label|steam_purchase|received_for_free|playtime_hours    |language_clean|review_year|genres                  |primary_genre|is_free|price|release_year|overall_positive_rate|
++-------+------------------------------------+--------------------------------+----------------+--------+--------------------+--------------+-----------------+------------------+--------------+-----------+------------------------+-------------+-------+-----+------------+---------------------+
+|1643320|S.T.A.L.K.E.R. 2: Heart of Chornobyl|2026-09-25T11:27:33.006501+00:00|236122782       |true    |1                   |true          |false            |67.9              |english       |2026       |[Action, Adventure, RPG]|Action       |false  |NULL |2024        |0.7653660400958966   |
+|1643320|S.T.A.L.K.E.R. 2: Heart of Chornobyl|2026-09-25T11:27:33.006556+00:00|236120892       |false   |0                   |true          |false            |50.516666666666666|english       |2026       |[Action, Adventure, RPG]|Action       |false  |NULL |2024        |0.7653660400958966   |
+|1643320|S.T.A.L.K.E.R. 2: Heart of Chornobyl|2026-09-25T11:27:33.006597+00:00|236110693       |false   |0                   |false         |false            |51.916666666666664|english       |2026       |[Action, Adventure, RPG]|Action       |false  |NULL |2024        |0.7653660400958966   |
+|1643320|S.T.A.L.K.E.R. 2: Heart of Chornobyl|2026-09-25T11:27:33.006661+00:00|236106815       |true    |1                   |true          |false            |47.45             |english       |2026       |[Action, Adventure, RPG]|Action       |false  |NULL |2024        |0.7653660400958966   |
+|1643320|S.T.A.L.K.E.R. 2: Heart of Chornobyl|2026-09-25T11:27:33.006692+00:00|236106602       |true    |1                   |false         |false            |35.083333333333336|english       |2026       |[Action, Adventure, RPG]|Action       |false  |NULL |2024        |0.7653660400958966   |
++-------+------------------------------------+--------------------------------+----------------+--------+--------------------+--------------+-----------------+------------------+--------------+-----------+------------------------+-------------+-------+-----+------------+---------------------+
+only showing top 5 rows
+
+
+Missing Game Join:
+
+================================================================================
+[5] MAPREDUCE RESULT
+
+MapReduce Output:
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|value                                                                                                                                                                           |
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+|{"appid": "1085660", "game_name": "Destiny 2", "total_reviews": 500, "positive_reviews": 439, "negative_reviews": 61, "avg_playtime_hours": 764.75}\t                           |
+|{"appid": "108600", "game_name": "Project Zomboid", "total_reviews": 500, "positive_reviews": 458, "negative_reviews": 42, "avg_playtime_hours": 192.66}\t                      |
+|{"appid": "1142710", "game_name": "Total War: WARHAMMER III", "total_reviews": 500, "positive_reviews": 434, "negative_reviews": 66, "avg_playtime_hours": 417.52}\t            |
+|{"appid": "1144200", "game_name": "Ready or Not", "total_reviews": 500, "positive_reviews": 439, "negative_reviews": 61, "avg_playtime_hours": 37.98}\t                         |
+|{"appid": "1151340", "game_name": "Fallout 76", "total_reviews": 500, "positive_reviews": 359, "negative_reviews": 141, "avg_playtime_hours": 355.82}\t                         |
+|{"appid": "1172470", "game_name": "Apex Legends\u2122", "total_reviews": 500, "positive_reviews": 344, "negative_reviews": 156, "avg_playtime_hours": 336.7}\t                  |
+|{"appid": "1285190", "game_name": "Borderlands 4", "total_reviews": 500, "positive_reviews": 236, "negative_reviews": 264, "avg_playtime_hours": 59.9}\t                        |
+|{"appid": "1295660", "game_name": "Sid Meier's Civilization VII", "total_reviews": 500, "positive_reviews": 258, "negative_reviews": 242, "avg_playtime_hours": 146.11}\t       |
+|{"appid": "1361210", "game_name": "Warhammer 40,000: Darktide", "total_reviews": 500, "positive_reviews": 387, "negative_reviews": 113, "avg_playtime_hours": 179.77}\t         |
+|{"appid": "1643320", "game_name": "S.T.A.L.K.E.R. 2: Heart of Chornobyl", "total_reviews": 500, "positive_reviews": 391, "negative_reviews": 109, "avg_playtime_hours": 99.94}\t|
++--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+
+only showing top 10 rows
+
+
+DONE

@@ -157,7 +157,7 @@
   "playtime_buckets": [
     {
       "_id": "0-2h",
-      "avg_playtime_hours": 0.8951653944020354,
+      "avg_playtime_hours": 0.8951653944020355,
       "negative_reviews": 624,
       "playtime_bucket": "0-2h",
       "positive_reviews": 293,
@@ -167,7 +167,7 @@
     },
     {
       "_id": "10-50h",
-      "avg_playtime_hours": 25.761848684210527,
+      "avg_playtime_hours": 25.76184868421056,
       "negative_reviews": 1745,
       "playtime_bucket": "10-50h",
       "positive_reviews": 5855,
@@ -177,7 +177,7 @@
     },
     {
       "_id": "2-10h",
-      "avg_playtime_hours": 5.629330929487179,
+      "avg_playtime_hours": 5.629330929487178,
       "negative_reviews": 1113,
       "playtime_bucket": "2-10h",
       "positive_reviews": 3047,
@@ -187,7 +187,7 @@
     },
     {
       "_id": "50h+",
-      "avg_playtime_hours": 505.6641026725307,
+      "avg_playtime_hours": 505.66410267253025,
       "negative_reviews": 2861,
       "playtime_bucket": "50h+",
       "positive_reviews": 8963,
@@ -209,7 +209,7 @@
   "purchase_sources": [
     {
       "_id": "OTHER_SOURCE",
-      "avg_playtime_hours": 149.33679382147125,
+      "avg_playtime_hours": 149.3367938214713,
       "negative_reviews": 1299,
       "positive_reviews": 2607,
       "purchase_source": "OTHER_SOURCE",
@@ -219,7 +219,7 @@
     },
     {
       "_id": "STEAM_PURCHASE",
-      "avg_playtime_hours": 272.6725791049607,
+      "avg_playtime_hours": 272.67257910496096,
       "negative_reviews": 5380,
       "positive_reviews": 15714,
       "purchase_source": "STEAM_PURCHASE",

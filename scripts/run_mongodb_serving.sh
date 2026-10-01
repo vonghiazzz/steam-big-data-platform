@@ -59,4 +59,6 @@ PYTHONDONTWRITEBYTECODE=1 \
   "$PROJECT_ROOT/src/serving/run_mongodb_serving.py" \
   --mongo-uri "$MONGO_URI" \
   --database "$MONGO_DATABASE" \
-  --evidence-dir "$PROJECT_ROOT/evidence/serving"
+  --evidence-dir "$PROJECT_ROOT/evidence/serving" \
+  --expected-reviews "${MONGO_EXPECTED_REVIEWS:-25000}" \
+  --expected-games "${MONGO_EXPECTED_GAMES:-50}"
