@@ -9,14 +9,8 @@ from pathlib import Path
 
 import requests
 
-from steam.common.config import (
-    CANDIDATES_PATH,
-    CATALOG_PROBE_ROOT,
-)
-from steam.common.jsonl import (
-    read_jsonl,
-    write_jsonl,
-)
+from ..common.jsonl import read_jsonl, write_jsonl
+from .paths import CANDIDATES_PATH, CATALOG_ROOT
 
 
 APPDETAILS_URL = (
@@ -49,7 +43,7 @@ def qualify_catalog(
     input_path: Path,
     output_dir: Path,
     delay: float,
-) -> None:
+) -> list[dict]:
     output_dir.mkdir(
         parents=True,
         exist_ok=True,
@@ -462,6 +456,7 @@ def qualify_catalog(
     print(
         eligible_path
     )
+    return eligible
 
 
 def main():
@@ -481,7 +476,7 @@ def main():
         "--output-dir",
         type=Path,
         default=(
-            CATALOG_PROBE_ROOT
+            CATALOG_ROOT
         ),
     )
 

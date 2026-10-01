@@ -312,6 +312,21 @@ generate the batch ID automatically:
 bash scripts/run_onboarding_workflow.sh --run-discovery
 ```
 
+The command above reuses the current local candidate/probe snapshot. To fetch
+fresh Steam Store Search candidates before discovery, request the bounded
+catalog refresh explicitly:
+
+```bash
+bash scripts/run_onboarding_workflow.sh --run-discovery --refresh-catalog
+```
+
+Catalog Refresh V1 stages the Store Search result, metadata probes, and review
+probes before replacing the operational evidence. Its policy defaults are 50
+results per page and at most four pages; a failed later probe leaves the prior
+snapshot in place. Registry reconciliation preserves existing lifecycle states
+and outstanding `QUEUED` games. There is no discovery scheduler yet, and an
+`ACTIVE` game is not demoted or automatically re-evaluated by catalog refresh.
+
 The runner performs prepare, historical review crawl, validation, immutable
 incremental Bronze publication, Bronze verification, Silver, Gold, Analytics,
 MongoDB serving, per-game readiness checks, and finally the `QUEUED` to

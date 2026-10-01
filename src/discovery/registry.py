@@ -239,6 +239,7 @@ def build_onboarding_plan(
     *,
     policy_version: int,
     run_timestamp: str | None = None,
+    existing_queued_count: int = 0,
 ) -> tuple[dict[int, RegistryEntry], OnboardingPlan]:
     candidates: dict[int, Mapping[str, Any]] = {}
     for candidate in qualified_candidates:
@@ -246,8 +247,12 @@ def build_onboarding_plan(
         candidates.setdefault(appid, candidate)
 
     pending = sorted(reconciliation.pending_new_appids)
-    queued = pending[: onboarding_policy.max_new_games_per_cycle]
-    deferred = pending[onboarding_policy.max_new_games_per_cycle :]
+    available_slots = max(
+        0,
+        onboarding_policy.max_new_games_per_cycle - existing_queued_count,
+    )
+    queued = pending[:available_slots]
+    deferred = pending[available_slots:]
 
     registry = dict(reconciliation.registry)
     for appid in queued:
@@ -283,6 +288,39 @@ def build_onboarding_plan(
         queued_games=queued_games,
     )
     return registry, plan
+
+
+def reconcile_onboarding_queue(
+    existing_rows: Iterable[Mapping[str, Any]],
+    registry: Mapping[int, RegistryEntry],
+    onboarding_policy: OnboardingPolicy,
+) -> tuple[dict[str, Any], ...]:
+    """Materialize every outstanding QUEUED registry entry exactly once."""
+    existing_by_appid: dict[int, dict[str, Any]] = {}
+    for row in existing_rows:
+        appid = _positive_appid(row.get("appid"))
+        existing_by_appid.setdefault(appid, dict(row))
+
+    reconciled: list[dict[str, Any]] = []
+    for appid in sorted(registry):
+        entry = registry[appid]
+        if entry.status != STATUS_QUEUED:
+            continue
+        row = existing_by_appid.get(appid, {})
+        name = _optional_string(row.get("name")) or entry.name
+        if not name:
+            raise ValueError(f"QUEUED registry appid {appid} has no game name")
+        reconciled.append(
+            {
+                **row,
+                "appid": appid,
+                "name": name,
+                "target_reviews": onboarding_policy.target_reviews_per_game,
+                "policy_version": entry.policy_version,
+                "source": entry.source,
+            }
+        )
+    return tuple(reconciled)
 
 
 def _positive_appid(value: Any) -> int:

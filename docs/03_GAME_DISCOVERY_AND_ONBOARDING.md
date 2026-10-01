@@ -13,6 +13,36 @@ Periodic Catalog Discovery
 
 Catalog probing, the initial research selection, the versioned policy configuration/evaluator, and the local JSONL Discovery Control Plane V1 are **Implemented**. A production registry service, scheduler, and admin interface remain **Design-only**.
 
+## Bounded fresh catalog refresh
+
+Catalog Refresh V1 is an explicit network operation:
+
+```text
+Steam Store Search
+-> bounded candidate AppIDs
+-> metadata probe
+-> review-availability probe
+-> existing qualification policy
+-> registry and onboarding queue reconciliation
+```
+
+Run the complete onboarding workflow with a fresh catalog window using:
+
+```bash
+bash scripts/run_onboarding_workflow.sh --run-discovery --refresh-catalog
+```
+
+Without `--refresh-catalog`, discovery continues to use the existing local
+probe snapshot. The configured default refresh is bounded to 50 results per
+page and four pages; it never attempts to mirror the complete Steam catalog.
+All probe output is produced and validated in staging first. Candidate,
+metadata, eligible-game, and review-probe evidence replaces the operational
+snapshot only after every stage completes consistently, so a later-stage
+failure leaves the previous snapshot usable.
+
+Catalog refresh is not scheduled automatically. `WEEKLY` remains policy
+metadata until a scheduler is implemented.
+
 ## Qualification versus onboarding
 
 Qualification answers **“Is this game eligible?”** It is a source/scope decision, not review cleaning, feature engineering, or target optimization. The default rules are loaded from `config/discovery_policy.json`:
@@ -35,6 +65,8 @@ Onboarding answers **“If eligible, should/how should it be onboarded?”** Its
 |---|---:|
 | Historical target | 500 reviews/game |
 | Maximum new games per discovery cycle | 10 |
+| Catalog refresh page size | 50 |
+| Maximum catalog pages per refresh | 4 |
 | Discovery frequency | `WEEKLY` |
 | Maximum retry attempts | 3 |
 
@@ -91,7 +123,7 @@ Optional terminal state: RETIRED
 
 The registry is control metadata. Raw game/review records remain in HDFS Bronze. A future registry entry should track the AppID, canonical name, lifecycle state, discovery and qualification timestamps, policy version, backfill status, source cursor/version, polling state, and failure/retry reason.
 
-Discovery Control Plane V1 uses `data/raw/registry/game_registry.jsonl` at runtime, separate from the immutable research snapshot. If the registry does not exist, `selected_50_games.jsonl` seeds 50 `ACTIVE` entries with source `INITIAL_RESEARCH_SNAPSHOT`. Reconciliation deduplicates by AppID, preserves existing `ACTIVE` entries, creates unseen qualified games as `NEW`, queues at most the configured `max_new_games_per_cycle`, and leaves the remainder `NEW`/deferred.
+Discovery Control Plane V1 uses `data/raw/registry/game_registry.jsonl` at runtime, separate from the immutable research snapshot. If the registry does not exist, `selected_50_games.jsonl` seeds 50 `ACTIVE` entries with source `INITIAL_RESEARCH_SNAPSHOT`. Reconciliation deduplicates by AppID, preserves every existing lifecycle state, creates unseen qualified games as `NEW`, preserves outstanding `QUEUED` entries without duplicates, fills only the remaining `max_new_games_per_cycle` capacity, and leaves excess games `NEW`/deferred.
 
 `src/discovery/run_discovery.py` produces a deterministic onboarding plan, a crawler-compatible JSONL queue, and a reconciled run report. It does not start historical backfill. Production persistence, scheduling, and multi-user concurrency remain **Design-only**.
 
@@ -125,7 +157,7 @@ The configured default is three attempts with exponential backoff. The intended 
 
 The current policy is version 1. Future discovery evidence should record the policy version used. Configuration history does not require a policy database in this slice.
 
-Policy changes are non-retroactive by default. If Game A became `ACTIVE` under version 1 and version 2 raises `min_total_reviews`, Game A remains `ACTIVE`. The new policy applies to future discovery/onboarding. Re-evaluating existing `ACTIVE` games is a separate explicit **Design-only** operation.
+Policy changes are non-retroactive by default. If Game A became `ACTIVE` under version 1 and version 2 raises `min_total_reviews`, Game A remains `ACTIVE`. Catalog refresh does not demote it. The new policy applies to future discovery/onboarding. Re-evaluating existing `ACTIVE` games is a separate explicit **Design-only** operation.
 
 ## Current research snapshot
 

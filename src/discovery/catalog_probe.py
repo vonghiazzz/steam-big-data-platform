@@ -6,12 +6,8 @@ from pathlib import Path
 import requests
 from bs4 import BeautifulSoup
 
-from steam.common.config import (
-    CATALOG_PROBE_ROOT,
-)
-from steam.common.jsonl import (
-    write_jsonl,
-)
+from ..common.jsonl import write_jsonl
+from .paths import CATALOG_ROOT
 
 
 BASE_URL = (
@@ -113,7 +109,7 @@ def probe_catalog(
     page_size: int,
     max_pages: int,
     delay: float,
-) -> None:
+) -> list[dict]:
     output_dir.mkdir(
         parents=True,
         exist_ok=True,
@@ -344,6 +340,7 @@ def probe_catalog(
     print(
         candidates_path
     )
+    return all_candidates
 
 
 def main():
@@ -355,7 +352,7 @@ def main():
         "--output-dir",
         type=Path,
         default=(
-            CATALOG_PROBE_ROOT
+            CATALOG_ROOT
         ),
     )
 

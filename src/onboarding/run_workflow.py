@@ -16,6 +16,14 @@ from typing import Callable
 
 from src.common.jsonl import read_jsonl, write_jsonl
 from src.discovery.policy import load_discovery_policy
+from src.discovery.paths import (
+    CANDIDATES_PATH,
+    DISCOVERY_REPORT_PATH,
+    ELIGIBLE_GAMES_PATH,
+    INITIAL_SNAPSHOT_PATH,
+    ONBOARDING_PLAN_PATH,
+    REVIEW_PROBE_PATH,
+)
 from src.discovery.registry import load_registry, save_registry
 from src.onboarding.activation import GameReadiness, build_activated_registry
 from src.onboarding.hdfs_preflight import inspect_hdfs_collisions
@@ -68,6 +76,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY)
     parser.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
     parser.add_argument("--metadata-probe", type=Path, default=DEFAULT_METADATA_PROBE)
+    parser.add_argument("--candidates", type=Path, default=CANDIDATES_PATH)
+    parser.add_argument("--review-probe", type=Path, default=REVIEW_PROBE_PATH)
+    parser.add_argument("--eligible-games", type=Path, default=ELIGIBLE_GAMES_PATH)
+    parser.add_argument("--initial-snapshot", type=Path, default=INITIAL_SNAPSHOT_PATH)
+    parser.add_argument("--discovery-plan", type=Path, default=ONBOARDING_PLAN_PATH)
+    parser.add_argument("--discovery-report", type=Path, default=DISCOVERY_REPORT_PATH)
     parser.add_argument("--baseline-reviews", type=Path, default=DEFAULT_BASELINE_REVIEWS)
     parser.add_argument("--canonical-games", type=Path, default=DEFAULT_CANONICAL_GAMES)
     parser.add_argument("--staging-root", type=Path, default=DEFAULT_STAGING_ROOT)
@@ -77,6 +91,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--spark-submit", default=os.getenv("SPARK_SUBMIT"))
     parser.add_argument("--run-discovery", action="store_true")
+    parser.add_argument("--refresh-catalog", action="store_true")
+    parser.add_argument("--refresh-page-size", type=int, default=None)
+    parser.add_argument("--refresh-max-pages", type=int, default=None)
+    parser.add_argument("--refresh-delay", type=float, default=None)
     parser.add_argument("--status", action="store_true")
     parser.add_argument("--stop-after", choices=PHASES)
     return parser
@@ -101,8 +119,42 @@ class Workflow:
                 raise RuntimeError("Another onboarding workflow is already running") from exc
 
             if self.args.run_discovery and not (self.root / "manifest.json").exists():
+                command = [
+                    sys.executable,
+                    "-m",
+                    "src.discovery.run_discovery",
+                    "--policy-path",
+                    str(self.args.policy),
+                    "--registry-path",
+                    str(self.args.registry),
+                    "--queue-path",
+                    str(self.args.queue),
+                    "--candidates-path",
+                    str(self.args.candidates),
+                    "--metadata-path",
+                    str(self.args.metadata_probe),
+                    "--review-probe-path",
+                    str(self.args.review_probe),
+                    "--eligible-path",
+                    str(self.args.eligible_games),
+                    "--snapshot-path",
+                    str(self.args.initial_snapshot),
+                    "--plan-path",
+                    str(self.args.discovery_plan),
+                    "--report-path",
+                    str(self.args.discovery_report),
+                ]
+                if self.args.refresh_catalog:
+                    command.append("--refresh-catalog")
+                for option, value in (
+                    ("--refresh-page-size", self.args.refresh_page_size),
+                    ("--refresh-max-pages", self.args.refresh_max_pages),
+                    ("--refresh-delay", self.args.refresh_delay),
+                ):
+                    if value is not None:
+                        command.extend((option, str(value)))
                 self._run_command(
-                    [sys.executable, "-m", "src.discovery.run_discovery"],
+                    command,
                     "discovery",
                 )
 
@@ -349,6 +401,10 @@ class Workflow:
                 "--conf",
                 "spark.ui.enabled=false",
                 "--conf",
+                "spark.driver.bindAddress=127.0.0.1",
+                "--conf",
+                "spark.driver.host=127.0.0.1",
+                "--conf",
                 f"spark.hadoop.fs.defaultFS={default_fs}",
                 "--conf",
                 "spark.hadoop.dfs.client.use.datanode.hostname=false",
@@ -509,7 +565,10 @@ class Workflow:
 
 
 def main() -> int:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.refresh_catalog and not args.run_discovery:
+        parser.error("--refresh-catalog requires --run-discovery")
     workflow = Workflow(args)
     if args.status:
         print(json.dumps(workflow.state, indent=2, ensure_ascii=False))

@@ -19,28 +19,43 @@ from .policy import (
     evaluate_qualification,
     load_discovery_policy,
 )
+from .paths import (
+    CANDIDATES_PATH,
+    CATALOG_ROOT,
+    DISCOVERY_REPORT_PATH,
+    ELIGIBLE_GAMES_PATH,
+    INITIAL_SNAPSHOT_PATH,
+    METADATA_PROBE_PATH,
+    ONBOARDING_PLAN_PATH,
+    ONBOARDING_QUEUE_PATH,
+    PROJECT_ROOT,
+    REGISTRY_PATH,
+    REGISTRY_ROOT,
+    REVIEW_PROBE_PATH,
+)
+from .refresh_catalog import refresh_catalog
 from .registry import (
+    STATUS_QUEUED,
     OnboardingPlan,
     RegistryEntry,
     build_onboarding_plan,
     load_registry,
     reconcile_registry,
+    reconcile_onboarding_queue,
     save_registry,
     seed_registry_from_snapshot,
 )
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-CATALOG_ROOT = PROJECT_ROOT / "data" / "raw" / "catalog_probe"
-DEFAULT_CANDIDATES_PATH = CATALOG_ROOT / "candidates.jsonl"
-DEFAULT_METADATA_PATH = CATALOG_ROOT / "metadata_probe_raw.jsonl"
-DEFAULT_REVIEW_PROBE_PATH = CATALOG_ROOT / "review_probe.jsonl"
-DEFAULT_SNAPSHOT_PATH = PROJECT_ROOT / "data" / "raw" / "selected_50_games.jsonl"
-DEFAULT_REGISTRY_ROOT = PROJECT_ROOT / "data" / "raw" / "registry"
-DEFAULT_REGISTRY_PATH = DEFAULT_REGISTRY_ROOT / "game_registry.jsonl"
-DEFAULT_PLAN_PATH = DEFAULT_REGISTRY_ROOT / "onboarding_plan.json"
-DEFAULT_QUEUE_PATH = DEFAULT_REGISTRY_ROOT / "onboarding_queue.jsonl"
-DEFAULT_REPORT_PATH = DEFAULT_REGISTRY_ROOT / "discovery_run_report.json"
+DEFAULT_CANDIDATES_PATH = CANDIDATES_PATH
+DEFAULT_METADATA_PATH = METADATA_PROBE_PATH
+DEFAULT_REVIEW_PROBE_PATH = REVIEW_PROBE_PATH
+DEFAULT_SNAPSHOT_PATH = INITIAL_SNAPSHOT_PATH
+DEFAULT_REGISTRY_ROOT = REGISTRY_ROOT
+DEFAULT_REGISTRY_PATH = REGISTRY_PATH
+DEFAULT_PLAN_PATH = ONBOARDING_PLAN_PATH
+DEFAULT_QUEUE_PATH = ONBOARDING_QUEUE_PATH
+DEFAULT_REPORT_PATH = DISCOVERY_REPORT_PATH
 
 Evaluator = Callable[..., QualificationResult]
 
@@ -298,6 +313,9 @@ def run_control_plane(
         policy.onboarding,
         policy_version=policy.version,
         run_timestamp=run_timestamp,
+        existing_queued_count=sum(
+            entry.status == STATUS_QUEUED for entry in seeded_registry.values()
+        ),
     )
     report = DiscoveryRunReport(
         candidate_count=qualification.candidate_count,
@@ -333,6 +351,9 @@ def main() -> None:
         "--review-probe-path", type=Path, default=DEFAULT_REVIEW_PROBE_PATH
     )
     parser.add_argument(
+        "--eligible-path", type=Path, default=ELIGIBLE_GAMES_PATH
+    )
+    parser.add_argument(
         "--snapshot-path", type=Path, default=DEFAULT_SNAPSHOT_PATH
     )
     parser.add_argument(
@@ -341,6 +362,10 @@ def main() -> None:
     parser.add_argument("--plan-path", type=Path, default=DEFAULT_PLAN_PATH)
     parser.add_argument("--queue-path", type=Path, default=DEFAULT_QUEUE_PATH)
     parser.add_argument("--report-path", type=Path, default=DEFAULT_REPORT_PATH)
+    parser.add_argument("--refresh-catalog", action="store_true")
+    parser.add_argument("--refresh-page-size", type=int, default=None)
+    parser.add_argument("--refresh-max-pages", type=int, default=None)
+    parser.add_argument("--refresh-delay", type=float, default=None)
     parser.add_argument(
         "--as-of-date",
         type=date.fromisoformat,
@@ -350,30 +375,56 @@ def main() -> None:
     args = parser.parse_args()
 
     policy = load_discovery_policy(args.policy_path)
+    if args.refresh_catalog:
+        refresh_result = refresh_catalog(
+            policy=policy,
+            policy_path=args.policy_path,
+            registry_path=args.registry_path,
+            candidates_path=args.candidates_path,
+            metadata_path=args.metadata_path,
+            eligible_path=args.eligible_path,
+            review_probe_path=args.review_probe_path,
+            page_size=args.refresh_page_size,
+            max_pages=args.refresh_max_pages,
+            delay=args.refresh_delay,
+        )
+        print(
+            "Catalog refresh: "
+            + json.dumps(refresh_result.to_dict(), ensure_ascii=False)
+        )
+
     candidate_evidence = build_candidate_evidence(
         read_jsonl(args.candidates_path),
         read_jsonl(args.metadata_path),
         read_jsonl(args.review_probe_path),
     )
     run_timestamp = datetime.now(timezone.utc).isoformat()
+    existing_registry = load_registry(args.registry_path)
+    existing_queue = _read_optional_jsonl(args.queue_path)
     result = run_control_plane(
         candidate_evidence,
         read_jsonl(args.snapshot_path),
-        load_registry(args.registry_path),
+        existing_registry,
         policy,
         current_date=args.as_of_date,
         run_timestamp=run_timestamp,
     )
 
+    reconciled_queue = reconcile_onboarding_queue(
+        existing_queue,
+        result.registry,
+        policy.onboarding,
+    )
     save_registry(args.registry_path, result.registry)
     _write_json(args.plan_path, result.onboarding_plan.to_dict())
-    write_jsonl(args.queue_path, result.onboarding_plan.queued_games)
+    write_jsonl(args.queue_path, reconciled_queue)
     _write_json(args.report_path, result.run_report.to_dict())
 
     print(json.dumps(result.run_report.to_dict(), indent=2, ensure_ascii=False))
     print(f"Registry: {args.registry_path}")
     print(f"Onboarding plan: {args.plan_path}")
     print(f"Crawler queue: {args.queue_path}")
+    print(f"Outstanding queued games: {len(reconciled_queue)}")
     print(f"Run report: {args.report_path}")
     print("Historical backfill was not started.")
 
@@ -428,6 +479,12 @@ def _write_json(path: Path, payload: Mapping[str, Any]) -> None:
         encoding="utf-8",
     )
     temporary_path.replace(path)
+
+
+def _read_optional_jsonl(path: Path) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    return read_jsonl(path)
 
 
 if __name__ == "__main__":
