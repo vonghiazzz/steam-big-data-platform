@@ -34,6 +34,12 @@ from src.discovery.registry import (
 DEFAULT_STAGING_ROOT = PROJECT_ROOT / "data" / "onboarding"
 DEFAULT_CHECK_INTERVAL_SECONDS = 3600
 COMPLETED = "COMPLETED"
+ABANDONED = "ABANDONED"
+
+TERMINAL_BATCH_STATUSES = {
+    COMPLETED,
+    ABANDONED,
+}
 CommandRunner = Callable[[list[str]], object]
 
 
@@ -104,7 +110,7 @@ def find_unfinished_batch(staging_root: Path) -> tuple[str | None, int]:
         return None, 0
     for state_path in sorted(staging_root.glob("*/workflow_state.json")):
         payload = json.loads(state_path.read_text(encoding="utf-8"))
-        if payload.get("status") == COMPLETED:
+        if payload.get("status") in TERMINAL_BATCH_STATUSES:
             continue
         batch_id = str(payload.get("batch_id") or state_path.parent.name)
         manifest_path = state_path.parent / "manifest.json"
@@ -181,7 +187,10 @@ class DiscoveryScheduler:
                 manifest_slots = 0
             else:
                 payload = json.loads(active_state.read_text(encoding="utf-8"))
-            if active_state.exists() and payload.get("status") == COMPLETED:
+            if (
+                active_state.exists()
+                and payload.get("status") in TERMINAL_BATCH_STATUSES
+            ):
                 unfinished_batch_id = str(active_batch_id)
                 manifest_slots = -1
 
@@ -277,6 +286,14 @@ class DiscoveryScheduler:
                 state["active_batch_id"] = None
                 self._record_success(state, plan.period)
                 return 0
+            except KeyboardInterrupt:
+                state["last_attempt_status"] = "INTERRUPTED"
+                state["last_error"] = "Scheduler interrupted by operator"
+                save_scheduler_state(
+                    self.state_path,
+                    state,
+                )
+                raise
             except Exception as exc:
                 state["last_attempt_status"] = "FAILED"
                 state["last_error"] = str(exc)
