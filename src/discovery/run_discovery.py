@@ -10,6 +10,23 @@ from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
+import requests
+from .registry import (
+    RegistryEntry,
+    build_onboarding_plan,
+    calculate_onboarding_capacity,
+    reconcile_registry,
+    seed_registry_from_snapshot,
+)
+from .feasibility_cache import (
+    load_feasibility_cache,
+    save_feasibility_cache,
+    snapshot_fingerprint,
+)
+
+from .review_feasibility import (
+    probe_review_feasibility,
+)
 
 from ..common.jsonl import read_jsonl, write_jsonl
 from .policy import (
@@ -56,6 +73,13 @@ DEFAULT_REGISTRY_PATH = REGISTRY_PATH
 DEFAULT_PLAN_PATH = ONBOARDING_PLAN_PATH
 DEFAULT_QUEUE_PATH = ONBOARDING_QUEUE_PATH
 DEFAULT_REPORT_PATH = DISCOVERY_REPORT_PATH
+DEFAULT_FEASIBILITY_CACHE_PATH = (
+    PROJECT_ROOT
+    / "data"
+    / "state"
+    / "discovery"
+    / "crawl_feasibility_cache_v1.json"
+)
 
 Evaluator = Callable[..., QualificationResult]
 
@@ -279,6 +303,383 @@ def qualify_candidates(
         rejection_reason_counts=dict(sorted(reason_counts.items())),
     )
 
+def filter_crawl_feasible_candidates(
+    candidates,
+    target_reviews: int,
+    *,
+    delay: float = 0.0,
+    session=None,
+    feasibility_probe=probe_review_feasibility,
+):
+    """
+    Keep only candidates that can satisfy the historical
+    crawl contract.
+
+    Basic qualification and crawl feasibility are separate:
+    - qualification checks game/source eligibility
+    - feasibility checks whether onboarding can obtain the
+      required number of unique English reviews
+    """
+
+    if target_reviews <= 0:
+        raise ValueError(
+            "target_reviews must be positive"
+        )
+
+    own_session = session is None
+
+    if session is None:
+        session = requests.Session()
+
+    feasible = []
+    rejected = []
+
+    try:
+        for candidate in candidates:
+            appid = int(candidate["appid"])
+
+            result = feasibility_probe(
+                session,
+                appid,
+                target_reviews,
+                delay=delay,
+            )
+
+            enriched = {
+                **dict(candidate),
+                "crawl_feasibility": (
+                    result.to_dict()
+                ),
+            }
+
+            if result.feasible:
+                feasible.append(enriched)
+
+                print(
+                    "CRAWL FEASIBLE:",
+                    appid,
+                    f"{result.unique_reviews}/"
+                    f"{target_reviews}",
+                )
+            else:
+                rejected.append(enriched)
+
+                print(
+                    "CRAWL REJECTED:",
+                    appid,
+                    f"{result.unique_reviews}/"
+                    f"{target_reviews}",
+                    result.status,
+                )
+
+    finally:
+        if own_session:
+            session.close()
+
+    return feasible, rejected
+
+def apply_crawl_feasibility(
+    qualification: QualificationBatch,
+    target_reviews: int,
+    *,
+    candidate_appids=None,
+    required_feasible: int | None = None,
+    delay: float = 0.0,
+    session=None,
+    feasibility_probe=probe_review_feasibility,
+    cache_path: Path | None = None,
+    cache_snapshot_id: str | None = None,
+) -> QualificationBatch:
+    """
+    Probe crawl feasibility for a deterministic subset of
+    basically-qualified candidates.
+
+    When required_feasible is set, probing stops as soon as
+    that many feasible candidates have been found.
+
+    Candidates not yet probed remain qualified/NEW and can
+    be deferred to a later discovery cycle.
+    """
+
+    if target_reviews <= 0:
+        raise ValueError(
+            "target_reviews must be positive"
+        )
+
+    if (
+        required_feasible is not None
+        and required_feasible < 0
+    ):
+        raise ValueError(
+            "required_feasible must be non-negative"
+        )
+
+    if (
+        (cache_path is None)
+        != (cache_snapshot_id is None)
+    ):
+        raise ValueError(
+            "cache_path and cache_snapshot_id "
+            "must be provided together"
+        )
+
+    cache_results: dict[int, dict] = {}
+
+    if cache_path is not None:
+        cache_results = (
+            load_feasibility_cache(
+                cache_path,
+                snapshot_id=cache_snapshot_id,
+                target_reviews=target_reviews,
+            )
+        )
+
+    candidate_by_appid = {
+        int(candidate["appid"]): dict(candidate)
+        for candidate in qualification.qualified_candidates
+    }
+
+    if candidate_appids is None:
+        probe_order = list(
+            candidate_by_appid
+        )
+    else:
+        probe_order = [
+            int(appid)
+            for appid in candidate_appids
+        ]
+
+    own_session = session is None
+
+    if session is None:
+        session = requests.Session()
+
+    feasible_updates = {}
+    crawl_rejected = {}
+    feasible_found = 0
+
+    try:
+        for appid in probe_order:
+            if (
+                required_feasible is not None
+                and feasible_found >= required_feasible
+            ):
+                break
+
+            candidate = candidate_by_appid.get(
+                appid
+            )
+
+            if candidate is None:
+                raise RuntimeError(
+                    "Feasibility probe appid is not "
+                    "present in qualified candidates: "
+                    f"{appid}"
+                )
+
+            cached = cache_results.get(
+                appid
+            )
+
+            if cached is not None:
+                result_payload = dict(
+                    cached
+                )
+                source = "CACHE"
+
+            else:
+                result = feasibility_probe(
+                    session,
+                    appid,
+                    target_reviews,
+                    delay=delay,
+                )
+
+                result_payload = (
+                    result.to_dict()
+                )
+                source = "LIVE"
+
+                if cache_path is not None:
+                    cache_results[
+                        appid
+                    ] = result_payload
+
+                    save_feasibility_cache(
+                        cache_path,
+                        snapshot_id=(
+                            cache_snapshot_id
+                        ),
+                        target_reviews=(
+                            target_reviews
+                        ),
+                        results=(
+                            cache_results
+                        ),
+                    )
+
+            try:
+                feasible = result_payload[
+                    "feasible"
+                ]
+
+                unique_reviews = int(
+                    result_payload[
+                        "unique_reviews"
+                    ]
+                )
+
+                status = str(
+                    result_payload[
+                        "status"
+                    ]
+                )
+
+                if not isinstance(
+                    feasible,
+                    bool,
+                ):
+                    raise TypeError(
+                        "feasible must be bool"
+                    )
+
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+            ) as exc:
+                raise ValueError(
+                    "Invalid feasibility result "
+                    f"for appid {appid}"
+                ) from exc
+
+            enriched = {
+                **candidate,
+                "crawl_feasibility":
+                    result_payload,
+            }
+
+            if feasible:
+                feasible_updates[
+                    appid
+                ] = enriched
+
+                feasible_found += 1
+
+                prefix = (
+                    "CRAWL FEASIBLE"
+                )
+
+                if source == "CACHE":
+                    prefix += " [CACHE]"
+
+                print(
+                    f"{prefix}:",
+                    appid,
+                    f"{unique_reviews}/"
+                    f"{target_reviews}",
+                )
+
+            else:
+                crawl_rejected[
+                    appid
+                ] = {
+                    **enriched,
+                    "crawl_rejection_reason":
+                        "INSUFFICIENT_CRAWLABLE_REVIEWS",
+                }
+
+                prefix = (
+                    "CRAWL REJECTED"
+                )
+
+                if source == "CACHE":
+                    prefix += " [CACHE]"
+
+                print(
+                    f"{prefix}:",
+                    appid,
+                    f"{unique_reviews}/"
+                    f"{target_reviews}",
+                    status,
+                )
+
+    finally:
+        if own_session:
+            session.close()
+
+    qualified = []
+
+    for candidate in (
+        qualification.qualified_candidates
+    ):
+        appid = int(
+            candidate["appid"]
+        )
+
+        if appid in crawl_rejected:
+            continue
+
+        qualified.append(
+            feasible_updates.get(
+                appid,
+                dict(candidate),
+            )
+        )
+
+    rejected = list(
+        qualification.rejected_candidates
+    )
+
+    for appid in probe_order:
+        candidate = crawl_rejected.get(
+            appid
+        )
+
+        if candidate is not None:
+            rejected.append(
+                candidate
+            )
+
+    reason_counts = dict(
+        qualification.rejection_reason_counts
+    )
+
+    if crawl_rejected:
+        reason_counts[
+            "INSUFFICIENT_CRAWLABLE_REVIEWS"
+        ] = (
+            reason_counts.get(
+                "INSUFFICIENT_CRAWLABLE_REVIEWS",
+                0,
+            )
+            + len(crawl_rejected)
+        )
+
+    return QualificationBatch(
+        candidate_count=(
+            qualification.candidate_count
+        ),
+        duplicate_candidate_count=(
+            qualification
+            .duplicate_candidate_count
+        ),
+        qualified_candidates=tuple(
+            qualified
+        ),
+        rejected_candidates=tuple(
+            rejected
+        ),
+        failed_candidates=(
+            qualification.failed_candidates
+        ),
+        rejection_reason_counts=dict(
+            sorted(
+                reason_counts.items()
+            )
+        ),
+    )
+
 
 def run_control_plane(
     candidate_evidence: Iterable[Mapping[str, Any]],
@@ -290,24 +691,71 @@ def run_control_plane(
     run_timestamp: str | None = None,
     evaluator: Evaluator = evaluate_qualification,
     max_active_games: int = 100,
+    feasibility_probe=None,
+    feasibility_delay: float = 0.0,
+    feasibility_cache_path: Path | None = None,
+    feasibility_snapshot_id: str | None = None,
 ) -> DiscoveryControlPlaneResult:
     qualification = qualify_candidates(
-        candidate_evidence,
-        policy,
-        current_date=current_date,
-        evaluator=evaluator,
-    )
+    candidate_evidence,
+    policy,
+    current_date=current_date,
+    evaluator=evaluator,
+)
+
     seeded_registry = seed_registry_from_snapshot(
         snapshot_rows,
         registry,
         policy_version=policy.version,
     )
+
     reconciliation = reconcile_registry(
         qualification.qualified_candidates,
         seeded_registry,
         policy_version=policy.version,
         run_timestamp=run_timestamp,
     )
+
+    capacity = calculate_onboarding_capacity(
+        reconciliation.registry,
+        max_active_games=max_active_games,
+        max_new_games_per_cycle=(
+            policy.onboarding
+            .max_new_games_per_cycle
+        ),
+    )
+
+    if (
+        feasibility_probe is not None
+        and capacity.new_queue_capacity > 0
+        and reconciliation.pending_new_appids
+    ):
+        qualification = apply_crawl_feasibility(
+            qualification,
+            policy.onboarding.target_reviews_per_game,
+            candidate_appids=(
+                reconciliation.pending_new_appids
+            ),
+            required_feasible=(
+                capacity.new_queue_capacity
+            ),
+            delay=feasibility_delay,
+            feasibility_probe=feasibility_probe,
+            cache_path=(
+                feasibility_cache_path
+            ),
+            cache_snapshot_id=(
+                feasibility_snapshot_id
+            ),
+        )
+
+        reconciliation = reconcile_registry(
+            qualification.qualified_candidates,
+            reconciliation.registry,
+            policy_version=policy.version,
+            run_timestamp=run_timestamp,
+        )
+
     planned_registry, plan = build_onboarding_plan(
         reconciliation,
         qualification.qualified_candidates,
@@ -336,6 +784,34 @@ def run_control_plane(
         run_report=report,
     )
 
+def build_feasibility_snapshot_id(
+    paths: Iterable[Path],
+    *,
+    snapshot_date: date | None = None,
+) -> str:
+    effective_date = (
+        snapshot_date
+        or datetime.now(timezone.utc).date()
+    )
+
+    iso_week = effective_date.isocalendar()
+
+    snapshot_period = (
+        f"{iso_week.year}-"
+        f"W{iso_week.week:02d}"
+    )
+
+    content_fingerprint = (
+        snapshot_fingerprint(
+            list(paths)
+        )
+    )
+
+    return (
+        f"{snapshot_period}:"
+        f"{content_fingerprint}"
+    )
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -361,6 +837,11 @@ def main() -> None:
     parser.add_argument("--plan-path", type=Path, default=DEFAULT_PLAN_PATH)
     parser.add_argument("--queue-path", type=Path, default=DEFAULT_QUEUE_PATH)
     parser.add_argument("--report-path", type=Path, default=DEFAULT_REPORT_PATH)
+    parser.add_argument(
+        "--feasibility-cache-path",
+        type=Path,
+        default=DEFAULT_FEASIBILITY_CACHE_PATH,
+    )
     parser.add_argument("--refresh-catalog", action="store_true")
     parser.add_argument("--refresh-page-size", type=int, default=None)
     parser.add_argument("--refresh-max-pages", type=int, default=None)
@@ -399,6 +880,23 @@ def main() -> None:
             + json.dumps(refresh_result.to_dict(), ensure_ascii=False)
         )
 
+    feasibility_snapshot_id = (
+        build_feasibility_snapshot_id(
+            [
+                args.candidates_path,
+                args.metadata_path,
+                args.review_probe_path,
+            ],
+            snapshot_date=args.as_of_date,
+        )
+    )
+
+
+    print(
+        "Feasibility snapshot:",
+        feasibility_snapshot_id,
+    )
+
     candidate_evidence = build_candidate_evidence(
         read_jsonl(args.candidates_path),
         read_jsonl(args.metadata_path),
@@ -408,14 +906,25 @@ def main() -> None:
     existing_registry = load_registry(args.registry_path)
     existing_queue = _read_optional_jsonl(args.queue_path)
     result = run_control_plane(
-        candidate_evidence,
-        read_jsonl(args.snapshot_path),
-        existing_registry,
-        policy,
-        current_date=args.as_of_date,
-        run_timestamp=run_timestamp,
-        max_active_games=args.max_active_games,
-    )
+    candidate_evidence,
+    read_jsonl(args.snapshot_path),
+    existing_registry,
+    policy,
+    current_date=args.as_of_date,
+    run_timestamp=run_timestamp,
+    max_active_games=args.max_active_games,
+    feasibility_probe=probe_review_feasibility,
+    feasibility_delay=(
+        policy.catalog_refresh
+        .request_delay_seconds
+    ),
+    feasibility_cache_path=(
+        args.feasibility_cache_path
+    ),
+    feasibility_snapshot_id=(
+        feasibility_snapshot_id
+    ),
+)
 
     reconciled_queue = reconcile_onboarding_queue(
         existing_queue,
