@@ -1,6 +1,8 @@
 import unittest
 from dataclasses import replace
 from datetime import date
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from src.common.jsonl import read_jsonl
 from src.discovery.policy import load_discovery_policy
@@ -14,7 +16,12 @@ from src.discovery.registry import (
     reconcile_registry,
     seed_registry_from_snapshot,
 )
-from src.discovery.run_discovery import qualify_candidates, run_control_plane
+from src.discovery.run_discovery import (
+    apply_crawl_feasibility,
+    build_feasibility_snapshot_id,
+    qualify_candidates,
+    run_control_plane,
+)
 
 
 AS_OF_DATE = date(2026, 9, 23)
@@ -30,6 +37,25 @@ def valid_candidate(appid, name=None):
         "metadata_available": True,
         "review_endpoint_available": True,
     }
+
+
+class FakeFeasibilityResult:
+    def __init__(
+        self,
+        feasible,
+        unique_reviews,
+        status,
+    ):
+        self.feasible = feasible
+        self.unique_reviews = unique_reviews
+        self.status = status
+
+    def to_dict(self):
+        return {
+            "feasible": self.feasible,
+            "unique_reviews": self.unique_reviews,
+            "status": self.status,
+        }
 
 
 class DiscoveryControlPlaneTest(unittest.TestCase):
@@ -177,6 +203,293 @@ class DiscoveryControlPlaneTest(unittest.TestCase):
             report.candidate_count,
             report.qualified_count + report.rejected_count + report.failed_count,
         )
+
+    def test_feasibility_cache_resumes_after_interruption(self):
+        qualification = qualify_candidates(
+            [
+                valid_candidate(101),
+                valid_candidate(102),
+                valid_candidate(103),
+            ],
+            self.policy,
+            current_date=AS_OF_DATE,
+        )
+
+        with TemporaryDirectory() as directory:
+            cache_path = (
+                Path(directory)
+                / "crawl_feasibility_cache.json"
+            )
+
+            first_calls = []
+
+            def first_probe(
+                session,
+                appid,
+                target_reviews,
+                *,
+                delay,
+            ):
+                first_calls.append(appid)
+
+                if appid == 101:
+                    return FakeFeasibilityResult(
+                        True,
+                        500,
+                        "TARGET_REACHED",
+                    )
+
+                if appid == 102:
+                    return FakeFeasibilityResult(
+                        False,
+                        120,
+                        "EXHAUSTED",
+                    )
+
+                raise RuntimeError(
+                    "simulated interruption"
+                )
+
+            with self.assertRaises(RuntimeError):
+                apply_crawl_feasibility(
+                    qualification,
+                    500,
+                    candidate_appids=[
+                        101,
+                        102,
+                        103,
+                    ],
+                    required_feasible=2,
+                    feasibility_probe=first_probe,
+                    cache_path=cache_path,
+                    cache_snapshot_id=(
+                        "2026-W40:test-snapshot"
+                    ),
+                )
+
+            self.assertEqual(
+                [101, 102, 103],
+                first_calls,
+            )
+
+            second_calls = []
+
+            def second_probe(
+                session,
+                appid,
+                target_reviews,
+                *,
+                delay,
+            ):
+                second_calls.append(appid)
+
+                return FakeFeasibilityResult(
+                    True,
+                    500,
+                    "TARGET_REACHED",
+                )
+
+            resumed = apply_crawl_feasibility(
+                qualification,
+                500,
+                candidate_appids=[
+                    101,
+                    102,
+                    103,
+                ],
+                required_feasible=2,
+                feasibility_probe=second_probe,
+                cache_path=cache_path,
+                cache_snapshot_id=(
+                    "2026-W40:test-snapshot"
+                ),
+            )
+
+            self.assertEqual(
+                [103],
+                second_calls,
+            )
+
+            qualified_appids = {
+                int(row["appid"])
+                for row
+                in resumed.qualified_candidates
+            }
+
+            rejected_appids = {
+                int(row["appid"])
+                for row
+                in resumed.rejected_candidates
+            }
+
+            self.assertIn(
+                101,
+                qualified_appids,
+            )
+            self.assertIn(
+                103,
+                qualified_appids,
+            )
+            self.assertIn(
+                102,
+                rejected_appids,
+            )
+
+    def test_feasibility_cache_is_scoped_to_iso_week(self):
+        qualification = qualify_candidates(
+            [valid_candidate(201)],
+            self.policy,
+            current_date=AS_OF_DATE,
+        )
+
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            source_paths = [
+                root / "candidates.jsonl",
+                root / "metadata.jsonl",
+                root / "reviews.jsonl",
+            ]
+
+            for index, source_path in enumerate(
+                source_paths,
+                start=1,
+            ):
+                source_path.write_text(
+                    f"fixture-{index}\n",
+                    encoding="utf-8",
+                )
+
+            week_40 = build_feasibility_snapshot_id(
+                source_paths,
+                snapshot_date=date(
+                    2026,
+                    10,
+                    2,
+                ),
+            )
+
+            same_week = build_feasibility_snapshot_id(
+                source_paths,
+                snapshot_date=date(
+                    2026,
+                    10,
+                    3,
+                ),
+            )
+
+            week_41 = build_feasibility_snapshot_id(
+                source_paths,
+                snapshot_date=date(
+                    2026,
+                    10,
+                    9,
+                ),
+            )
+
+            self.assertEqual(
+                week_40,
+                same_week,
+            )
+            self.assertNotEqual(
+                week_40,
+                week_41,
+            )
+
+            self.assertEqual(
+                week_40.split(":", 1)[1],
+                week_41.split(":", 1)[1],
+            )
+
+            cache_path = (
+                root
+                / "crawl_feasibility_cache.json"
+            )
+
+            warm_calls = []
+
+            def warm_probe(
+                session,
+                appid,
+                target_reviews,
+                *,
+                delay,
+            ):
+                warm_calls.append(appid)
+
+                return FakeFeasibilityResult(
+                    True,
+                    500,
+                    "TARGET_REACHED",
+                )
+
+            apply_crawl_feasibility(
+                qualification,
+                500,
+                candidate_appids=[201],
+                required_feasible=1,
+                feasibility_probe=warm_probe,
+                cache_path=cache_path,
+                cache_snapshot_id=week_40,
+            )
+
+            self.assertEqual(
+                [201],
+                warm_calls,
+            )
+
+            def must_not_probe(
+                session,
+                appid,
+                target_reviews,
+                *,
+                delay,
+            ):
+                raise AssertionError(
+                    "same-week cache was not reused"
+                )
+
+            apply_crawl_feasibility(
+                qualification,
+                500,
+                candidate_appids=[201],
+                required_feasible=1,
+                feasibility_probe=must_not_probe,
+                cache_path=cache_path,
+                cache_snapshot_id=same_week,
+            )
+
+            new_week_calls = []
+
+            def new_week_probe(
+                session,
+                appid,
+                target_reviews,
+                *,
+                delay,
+            ):
+                new_week_calls.append(appid)
+
+                return FakeFeasibilityResult(
+                    True,
+                    500,
+                    "TARGET_REACHED",
+                )
+
+            apply_crawl_feasibility(
+                qualification,
+                500,
+                candidate_appids=[201],
+                required_feasible=1,
+                feasibility_probe=new_week_probe,
+                cache_path=cache_path,
+                cache_snapshot_id=week_41,
+            )
+
+            self.assertEqual(
+                [201],
+                new_week_calls,
+            )
 
     @staticmethod
     def _project_root():

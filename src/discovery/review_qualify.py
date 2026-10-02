@@ -31,6 +31,143 @@ DEFAULT_REQUEST_DELAY_SECONDS = (
     0.8
 )
 
+def _retry_wait_seconds(
+    attempt: int,
+    *,
+    exponential_backoff: bool,
+) -> int:
+    if not exponential_backoff:
+        return 2
+
+    return 2 ** attempt
+
+def _request_with_retry(
+    url: str,
+    *,
+    params: dict,
+    headers: dict,
+    retry_policy,
+):
+    last_error = None
+
+    for attempt in range(
+        1,
+        retry_policy.max_attempts + 1,
+    ):
+        try:
+            response = requests.get(
+                url,
+                params=params,
+                headers=headers,
+                timeout=30,
+            )
+
+        except requests.RequestException as exc:
+            last_error = exc
+
+            if (
+                attempt
+                >= retry_policy.max_attempts
+            ):
+                break
+
+            wait_seconds = (
+                _retry_wait_seconds(
+                    attempt,
+                    exponential_backoff=(
+                        retry_policy
+                        .exponential_backoff
+                    ),
+                )
+            )
+
+            print(
+                "NETWORK_ERROR "
+                f"retry={attempt}/"
+                f"{retry_policy.max_attempts} "
+                f"wait={wait_seconds}s",
+                end=" ",
+                flush=True,
+            )
+
+            time.sleep(
+                wait_seconds
+            )
+
+            continue
+
+        retryable_status = (
+            response.status_code == 403
+            or response.status_code == 429
+            or 500 <= response.status_code < 600
+        )
+
+        if not retryable_status:
+            response.raise_for_status()
+            return response
+
+        last_error = RuntimeError(
+            "Steam returned HTTP "
+            f"{response.status_code}"
+        )
+
+        if (
+            attempt
+            >= retry_policy.max_attempts
+        ):
+            break
+
+        retry_after = (
+            response.headers.get(
+                "Retry-After"
+            )
+        )
+
+        if retry_after:
+            try:
+                wait_seconds = max(
+                    1,
+                    int(retry_after),
+                )
+            except ValueError:
+                wait_seconds = (
+                    _retry_wait_seconds(
+                        attempt,
+                        exponential_backoff=(
+                            retry_policy
+                            .exponential_backoff
+                        ),
+                    )
+                )
+        else:
+            wait_seconds = (
+                _retry_wait_seconds(
+                    attempt,
+                    exponential_backoff=(
+                        retry_policy
+                        .exponential_backoff
+                    ),
+                )
+            )
+
+        print(
+            f"HTTP={response.status_code} "
+            f"retry={attempt}/"
+            f"{retry_policy.max_attempts} "
+            f"wait={wait_seconds}s",
+            end=" ",
+            flush=True,
+        )
+
+        time.sleep(
+            wait_seconds
+        )
+
+    raise RuntimeError(
+        "Steam review probe failed after "
+        f"{retry_policy.max_attempts} attempts"
+    ) from last_error
+
 
 def build_review_probe_params() -> dict:
     return {
@@ -127,11 +264,11 @@ def qualify_reviews(
         )
 
         try:
-            response = requests.get(
+            response = _request_with_retry(
                 url,
                 params=params,
                 headers=HEADERS,
-                timeout=30,
+                retry_policy=policy.retry,
             )
 
             print(
@@ -139,19 +276,6 @@ def qualify_reviews(
                 f"{response.status_code}",
                 end=" ",
             )
-
-            if response.status_code in (
-                403,
-                429,
-                503,
-            ):
-                raise RuntimeError(
-                    "Steam returned HTTP "
-                    f"{response.status_code}. "
-                    "Stop and retry later."
-                )
-
-            response.raise_for_status()
 
             payload = (
                 response.json()

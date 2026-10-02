@@ -2,32 +2,32 @@
   "free_vs_paid": [
     {
       "_id": "FREE",
-      "avg_playtime_hours": 425.82757471392085,
+      "avg_playtime_hours": 400.4074709195748,
       "avg_price": 0.0,
-      "game_count": 19,
+      "game_count": 21,
       "game_type": "FREE",
       "max_price": 0.0,
       "min_price": 0.0,
-      "negative_reviews": 2436,
-      "playtime_observed_count": 9001,
-      "positive_reviews": 7064,
-      "recommendation_rate": 0.743578947368421,
-      "review_count": 9500,
+      "negative_reviews": 2880,
+      "playtime_observed_count": 10001,
+      "positive_reviews": 7620,
+      "recommendation_rate": 0.7257142857142858,
+      "review_count": 10500,
       "serving_snapshot": "historical_v1"
     },
     {
       "_id": "PAID",
-      "avg_playtime_hours": 210.31520657276997,
-      "avg_price": 517387.323943662,
-      "game_count": 71,
+      "avg_playtime_hours": 198.86245738396627,
+      "avg_price": 476981.0126582279,
+      "game_count": 79,
       "game_type": "PAID",
       "max_price": 1799000.0,
-      "min_price": 59500.0,
-      "negative_reviews": 6701,
-      "playtime_observed_count": 35500,
-      "positive_reviews": 28799,
-      "recommendation_rate": 0.8112394366197183,
-      "review_count": 35500,
+      "min_price": 28500.0,
+      "negative_reviews": 6955,
+      "playtime_observed_count": 39500,
+      "positive_reviews": 32545,
+      "recommendation_rate": 0.8239240506329114,
+      "review_count": 39500,
       "serving_snapshot": "historical_v1"
     }
   ],
@@ -35,32 +35,38 @@
     {
       "_id": "Action",
       "genre": "Action",
-      "recommendation_rate": 0.77284,
-      "review_count": 25000
+      "recommendation_rate": 0.7804827586206896,
+      "review_count": 29000
     },
     {
       "_id": "Adventure",
       "genre": "Adventure",
-      "recommendation_rate": 0.8205555555555556,
-      "review_count": 18000
+      "recommendation_rate": 0.8272857142857143,
+      "review_count": 21000
     },
     {
       "_id": "RPG",
       "genre": "RPG",
-      "recommendation_rate": 0.818125,
-      "review_count": 16000
+      "recommendation_rate": 0.8267428571428571,
+      "review_count": 17500
     },
     {
       "_id": "Simulation",
       "genre": "Simulation",
-      "recommendation_rate": 0.8105806451612904,
-      "review_count": 15500
+      "recommendation_rate": 0.8161714285714285,
+      "review_count": 17500
     },
     {
       "_id": "Indie",
       "genre": "Indie",
-      "recommendation_rate": 0.9002857142857142,
-      "review_count": 10500
+      "recommendation_rate": 0.8827407407407407,
+      "review_count": 13500
+    },
+    {
+      "_id": "Free To Play",
+      "genre": "Free To Play",
+      "recommendation_rate": 0.7185263157894737,
+      "review_count": 9500
     },
     {
       "_id": "Strategy",
@@ -69,16 +75,16 @@
       "review_count": 9000
     },
     {
-      "_id": "Free To Play",
-      "genre": "Free To Play",
-      "recommendation_rate": 0.7376470588235294,
-      "review_count": 8500
-    },
-    {
       "_id": "Massively Multiplayer",
       "genre": "Massively Multiplayer",
       "recommendation_rate": 0.7424285714285714,
       "review_count": 7000
+    },
+    {
+      "_id": "Casual",
+      "genre": "Casual",
+      "recommendation_rate": 0.834,
+      "review_count": 4500
     },
     {
       "_id": "Sports",
@@ -87,16 +93,10 @@
       "review_count": 4500
     },
     {
-      "_id": "Casual",
-      "genre": "Casual",
-      "recommendation_rate": 0.8605,
-      "review_count": 4000
-    },
-    {
       "_id": "Racing",
       "genre": "Racing",
-      "recommendation_rate": 0.798,
-      "review_count": 3500
+      "recommendation_rate": 0.80775,
+      "review_count": 4000
     },
     {
       "_id": "Early Access",
@@ -137,62 +137,62 @@
   ],
   "historical_label_profile": {
     "_id": "historical_baseline",
-    "distinct_appids": 90,
-    "free_review_count": 9500,
-    "negative_count": 9137,
-    "negative_percentage": 0.20304444444444444,
+    "distinct_appids": 100,
+    "free_review_count": 10500,
+    "negative_count": 9835,
+    "negative_percentage": 0.1967,
     "null_genres": 500,
     "null_playtime_at_review": 499,
     "null_playtime_forever": 0,
     "null_price": 0,
     "null_timestamp_created": 0,
     "null_weighted_vote_score": 0,
-    "paid_review_count": 35500,
-    "positive_count": 35863,
-    "positive_percentage": 0.7969555555555555,
+    "paid_review_count": 39500,
+    "positive_count": 40165,
+    "positive_percentage": 0.8033,
     "serving_snapshot": "historical_v1",
-    "total_rows": 45000,
-    "unique_recommendationid": 45000
+    "total_rows": 50000,
+    "unique_recommendationid": 50000
   },
   "playtime_buckets": [
     {
       "_id": "0-2h",
-      "avg_playtime_hours": 0.8798426745329399,
-      "negative_reviews": 971,
+      "avg_playtime_hours": 0.8765758686921601,
+      "negative_reviews": 1062,
       "playtime_bucket": "0-2h",
-      "positive_reviews": 724,
-      "recommendation_rate": 0.4271386430678466,
-      "review_count": 1695,
+      "positive_reviews": 847,
+      "recommendation_rate": 0.4436877946568884,
+      "review_count": 1909,
       "serving_snapshot": "historical_v1"
     },
     {
       "_id": "10-50h",
-      "avg_playtime_hours": 25.20274249491694,
-      "negative_reviews": 2363,
+      "avg_playtime_hours": 25.198641431550325,
+      "negative_reviews": 2562,
       "playtime_bucket": "10-50h",
-      "positive_reviews": 11572,
-      "recommendation_rate": 0.830426982418371,
-      "review_count": 13935,
+      "positive_reviews": 13104,
+      "recommendation_rate": 0.8364611260053619,
+      "review_count": 15666,
       "serving_snapshot": "historical_v1"
     },
     {
       "_id": "2-10h",
-      "avg_playtime_hours": 5.656479071112771,
-      "negative_reviews": 1636,
+      "avg_playtime_hours": 5.6831090935608595,
+      "negative_reviews": 1762,
       "playtime_bucket": "2-10h",
-      "positive_reviews": 6431,
-      "recommendation_rate": 0.797198462873435,
-      "review_count": 8067,
+      "positive_reviews": 7380,
+      "recommendation_rate": 0.8072631809232116,
+      "review_count": 9142,
       "serving_snapshot": "historical_v1"
     },
     {
       "_id": "50h+",
-      "avg_playtime_hours": 523.9733448695769,
-      "negative_reviews": 3831,
+      "avg_playtime_hours": 500.8405854985958,
+      "negative_reviews": 4113,
       "playtime_bucket": "50h+",
-      "positive_reviews": 16973,
-      "recommendation_rate": 0.815852720630648,
-      "review_count": 20804,
+      "positive_reviews": 18671,
+      "recommendation_rate": 0.8194785814606742,
+      "review_count": 22784,
       "serving_snapshot": "historical_v1"
     },
     {
@@ -209,30 +209,48 @@
   "purchase_sources": [
     {
       "_id": "OTHER_SOURCE",
-      "avg_playtime_hours": 201.32610763164044,
-      "negative_reviews": 1714,
-      "positive_reviews": 5471,
+      "avg_playtime_hours": 192.8942907165431,
+      "negative_reviews": 1759,
+      "positive_reviews": 6047,
       "purchase_source": "OTHER_SOURCE",
-      "recommendation_rate": 0.7614474599860821,
-      "review_count": 7185,
+      "recommendation_rate": 0.7746605175506021,
+      "review_count": 7806,
       "serving_snapshot": "historical_v1"
     },
     {
       "_id": "STEAM_PURCHASE",
-      "avg_playtime_hours": 264.0297928502523,
-      "negative_reviews": 7423,
-      "positive_reviews": 30392,
+      "avg_playtime_hours": 248.32256505576302,
+      "negative_reviews": 8076,
+      "positive_reviews": 34118,
       "purchase_source": "STEAM_PURCHASE",
-      "recommendation_rate": 0.803702234563004,
-      "review_count": 37815,
+      "recommendation_rate": 0.8085983789164336,
+      "review_count": 42194,
       "serving_snapshot": "historical_v1"
     }
   ],
   "top_10_games": [
     {
+      "_id": 391540,
+      "game_name": "Undertale",
+      "recommendation_rate": 0.992,
+      "review_count": 500
+    },
+    {
       "_id": 413150,
       "game_name": "Stardew Valley",
       "recommendation_rate": 0.992,
+      "review_count": 500
+    },
+    {
+      "_id": 220200,
+      "game_name": "Kerbal Space Program",
+      "recommendation_rate": 0.986,
+      "review_count": 500
+    },
+    {
+      "_id": 620,
+      "game_name": "Portal 2",
+      "recommendation_rate": 0.982,
       "review_count": 500
     },
     {
@@ -269,24 +287,6 @@
       "_id": 105600,
       "game_name": "Terraria",
       "recommendation_rate": 0.966,
-      "review_count": 500
-    },
-    {
-      "_id": 427520,
-      "game_name": "Factorio",
-      "recommendation_rate": 0.964,
-      "review_count": 500
-    },
-    {
-      "_id": 431960,
-      "game_name": "Wallpaper Engine",
-      "recommendation_rate": 0.964,
-      "review_count": 500
-    },
-    {
-      "_id": 1086940,
-      "game_name": "Baldur's Gate 3",
-      "recommendation_rate": 0.962,
       "review_count": 500
     }
   ]

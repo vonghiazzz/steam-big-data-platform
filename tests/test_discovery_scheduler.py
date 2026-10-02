@@ -20,6 +20,7 @@ from src.discovery.run_discovery import run_control_plane
 from src.discovery.scheduler import (
     DiscoveryScheduler,
     SchedulerBusyError,
+    find_unfinished_batch,
     load_scheduler_state,
     save_scheduler_state,
     weekly_period,
@@ -194,6 +195,99 @@ class DiscoverySchedulerTest(unittest.TestCase):
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 with self.assertRaises(SchedulerBusyError):
                     scheduler.run_once(dry_run=True)
+
+    def test_abandoned_batch_is_not_unfinished(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            batch_root = (
+                root
+                / "onboarding"
+                / "abandoned-batch"
+            )
+            batch_root.mkdir(parents=True)
+
+            (
+                batch_root
+                / "workflow_state.json"
+            ).write_text(
+                json.dumps(
+                    {
+                        "batch_id": "abandoned-batch",
+                        "status": "ABANDONED",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            batch_id, slots = (
+                find_unfinished_batch(
+                    root / "onboarding"
+                )
+            )
+
+            self.assertIsNone(batch_id)
+            self.assertEqual(0, slots)
+
+    def test_keyboard_interrupt_records_interrupted_state(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            save_registry(
+                root / "registry.jsonl",
+                registry_with_counts(100),
+            )
+            write_jsonl(
+                root / "queue.jsonl",
+                [],
+            )
+
+            def interrupted_runner(command):
+                raise KeyboardInterrupt()
+
+            scheduler = DiscoveryScheduler(
+                policy_path=DEFAULT_POLICY_PATH,
+                registry_path=(
+                    root / "registry.jsonl"
+                ),
+                queue_path=(
+                    root / "queue.jsonl"
+                ),
+                state_path=(
+                    root / "state.json"
+                ),
+                lock_path=(
+                    root / "scheduler.lock"
+                ),
+                staging_root=(
+                    root / "onboarding"
+                ),
+                max_active_games=100,
+                command_runner=interrupted_runner,
+                clock=lambda: NOW,
+            )
+
+            with self.assertRaises(
+                KeyboardInterrupt
+            ):
+                scheduler.run_once()
+
+            state = load_scheduler_state(
+                root / "state.json"
+            )
+
+            self.assertEqual(
+                "INTERRUPTED",
+                state["last_attempt_status"],
+            )
+            self.assertEqual(
+                "Scheduler interrupted by operator",
+                state["last_error"],
+            )
+            self.assertIsNone(
+                state.get(
+                    "last_successful_period"
+                )
+            )
 
     def test_unfinished_onboarding_resumes_without_new_discovery(self):
         with tempfile.TemporaryDirectory() as directory:
