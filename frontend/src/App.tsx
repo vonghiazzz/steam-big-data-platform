@@ -227,7 +227,7 @@ function App() {
           <div className="source-card">
             <div className="source-card-top"><span className="source-pulse" /> DATA SOURCE</div>
             <strong>Historical snapshot</strong>
-            <span>50 games · 25k reviews</span>
+            <span>{loading ? '—' : formatNumber(dashboard.games.length)} games · {loading? '—': formatNumber(Number(totalReviews ?? 0) + Number(dashboard?.reviewTotal ?? 0))}  reviews</span>
           </div>
           <div className="sidebar-footer"><span>LOCAL ENVIRONMENT</span><span className="online-dot" /> CONNECTED</div>
         </div>
@@ -270,7 +270,7 @@ function App() {
               <section className="kpi-grid" aria-label="Snapshot summary">
                 <article className="kpi-card kpi-primary">
                   <div className="kpi-top"><span>TOTAL REVIEWS</span><span className="kpi-icon"><BarChart3 size={17} /></span></div>
-                  <div className="kpi-value">{loading ? '—' : formatNumber(totalReviews)}</div>
+                  <div className="kpi-value">{loading? '—': formatNumber(Number(totalReviews ?? 0) + Number(dashboard?.reviewTotal ?? 0))} </div>
                   <div className="kpi-foot"><span className="kpi-marker" />Across the selected game sample</div>
                 </article>
                 <article className="kpi-card">
