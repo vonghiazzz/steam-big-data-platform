@@ -68,6 +68,11 @@ src/
 - Realtime responses carry only `appid`; names come from `/api/analytics/games/top?limit=50`.
 - An empty realtime list is a valid state (no new reviews since the snapshot).
 
-## Assumptions to confirm with the Backend owner
+## Backend compatibility
 
-- `playtime_at_review` / `playtime_forever` are in minutes (see `formatPlaytimeMinutes` in `src/lib/format.ts`).
+Playtime fields (`playtime_at_review`, `playtime_forever`) are in minutes (verified on the MongoDB samples).
+
+The current Backend does not fully follow `API_CONTRACT_V1.md`. `src/lib/api/endpoints.ts` contains adapters
+that normalise real responses to the contract shape (no `meta`, `{"status":"healthy"}` health body,
+`page`/`page_size` review pagination, no `limit` on realtime games, 404 for a game without windows).
+Remove an adapter once the Backend conforms.

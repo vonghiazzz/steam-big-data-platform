@@ -59,8 +59,8 @@ export function formatRelative(iso: string | null | undefined, now = Date.now())
 }
 
 /**
- * playtime_at_review / playtime_forever. ASSUMPTION: minutes (Steam API convention).
- * Confirm with the Backend owner; if wrong, only this function needs to change.
+ * playtime_at_review / playtime_forever.
+ * Unit: minutes (verified on MongoDB samples).
  */
 export function formatPlaytimeMinutes(min: number | null | undefined): string {
   if (min === null || min === undefined) return "—";
