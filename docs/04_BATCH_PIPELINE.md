@@ -28,6 +28,13 @@ An existing `ACTIVE` game is handled by incremental polling and must not receive
 
 `src/processing/bronze_to_silver.py` runs as a PySpark job on the cluster client container (PySpark copied to `bda501-client:/tmp/pylibs`, `HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop`). Its responsibilities:
 
+Run command (from repo root, after copying the script into the container):
+
+```bash
+docker cp src/processing/bronze_to_silver.py bda501-client:/tmp/jobs/
+docker exec bda501-client sh -lc "PYTHONPATH=/tmp/pylibs HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop python3 /tmp/jobs/bronze_to_silver.py --bronze-root /steam/bronze --silver-root /steam/silver --master 'local[4]'"
+```
+
 1. Read Bronze game and review JSON/JSONL from HDFS.
 2. Apply explicit PySpark schemas rather than schema inference alone.
 3. Validate required keys and source relationships.
