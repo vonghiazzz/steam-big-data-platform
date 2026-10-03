@@ -9,9 +9,12 @@ export const formatNumber = (n: number | null | undefined) =>
 export const formatPercent = (rate: number | null | undefined, digits = 1) =>
   rate === null || rate === undefined ? "—" : `${(rate * 100).toFixed(digits)}%`;
 
+// Naive ISO strings (no "Z"/offset) can come from MongoDB datetimes serialised without a timezone: read them as UTC.
+const NAIVE_ISO = /^\d{4}-\d{2}-\d{2}T[\d:.]+$/;
+
 function parse(iso: string | null | undefined): Date | null {
   if (!iso) return null;
-  const d = new Date(iso);
+  const d = new Date(NAIVE_ISO.test(iso) ? `${iso}Z` : iso);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
