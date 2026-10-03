@@ -16,6 +16,7 @@ from src.ml.feature_engineering import (
     deterministic_stratified_split,
     feature_names_from_pipeline_model,
     prepare_ml_rows,
+    prepare_prediction_rows,
     profile_source,
     training_class_weights,
     validate_source_profile,
@@ -173,6 +174,23 @@ class MLlibV1Test(unittest.TestCase):
         )
         self.assertTrue(any(name.startswith("genre=") for name in names))
         self.assertTrue(any(name.startswith("category=") for name in names))
+        prediction_input = self.gold.select(
+            "recommendationid",
+            "playtime_at_review",
+            "steam_purchase",
+            "received_for_free",
+            "is_free",
+            "price",
+            "genres",
+            "categories",
+            "platforms",
+        ).limit(1)
+        prediction_features = prepare_prediction_rows(prediction_input)
+        self.assertNotIn("label", prediction_features.columns)
+        prediction = model.transform(prediction_features).first()
+        self.assertIn(int(prediction.prediction), (0, 1))
+        self.assertGreaterEqual(float(prediction.probability[1]), 0.0)
+        self.assertLessEqual(float(prediction.probability[1]), 1.0)
         second_model, _, second_names = self._fit_model(
             LogisticRegression(
                 featuresCol="features",

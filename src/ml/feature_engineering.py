@@ -226,6 +226,37 @@ def _clean_tokens(column: str):
 def prepare_ml_rows(df: DataFrame) -> DataFrame:
     """Create deterministic row-preserving features without fitting state."""
     assert_required_schema(df)
+    return _prepare_features(df, include_label=True)
+
+
+PREDICTION_REQUIRED_COLUMNS = (
+    "recommendationid",
+    "playtime_at_review",
+    "steam_purchase",
+    "received_for_free",
+    "is_free",
+    "price",
+    "genres",
+    "categories",
+    "platforms",
+)
+
+
+def prepare_prediction_rows(df: DataFrame) -> DataFrame:
+    """Prepare inference features using the same transformations as training."""
+    missing = sorted(set(PREDICTION_REQUIRED_COLUMNS) - set(df.columns))
+    if missing:
+        raise RuntimeError(
+            "prediction input is missing required columns: " + ", ".join(missing)
+        )
+    return _prepare_features(df)
+
+
+def _prepare_features(
+    df: DataFrame,
+    *,
+    include_label: bool = False,
+) -> DataFrame:
     playtime = F.when(
         F.col("playtime_at_review") >= F.lit(0),
         F.col("playtime_at_review").cast("double"),
@@ -252,10 +283,16 @@ def prepare_ml_rows(df: DataFrame) -> DataFrame:
     }
     prepared = df.select(
         "recommendationid",
-        F.when(F.col("voted_up") == F.lit(True), F.lit(1.0))
-        .when(F.col("voted_up") == F.lit(False), F.lit(0.0))
-        .otherwise(F.lit(None).cast("double"))
-        .alias("label"),
+        *(
+            [
+                F.when(F.col("voted_up") == F.lit(True), F.lit(1.0))
+                .when(F.col("voted_up") == F.lit(False), F.lit(0.0))
+                .otherwise(F.lit(None).cast("double"))
+                .alias("label")
+            ]
+            if include_label
+            else []
+        ),
         *[expression.alias(name) for name, expression in numeric_expressions.items()],
         _clean_tokens("genres").alias("genres_tokens"),
         _clean_tokens("categories").alias("categories_tokens"),
