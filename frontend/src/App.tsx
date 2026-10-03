@@ -28,9 +28,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import PredictionView from './PredictionView'
 import './App.css'
 
-type View = 'overview' | 'games' | 'live'
+type View = 'overview' | 'games' | 'live' | 'prediction'
 
 type Game = {
   appid: number
@@ -197,6 +198,7 @@ function App() {
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'games', label: 'Games', icon: Gamepad2 },
     { id: 'live', label: 'Live feed', icon: Waves },
+    { id: 'prediction', label: 'AI prediction', icon: Sparkles },
   ]
 
   return (
@@ -251,8 +253,8 @@ function App() {
           <section className="page-heading">
             <div>
               <div className="eyebrow"><span className="eyebrow-line" /> HISTORICAL ANALYTICS <span className="snapshot-tag">V1 SNAPSHOT</span></div>
-              <h1>{view === 'overview' ? 'Review intelligence' : view === 'games' ? 'Game performance' : 'Realtime review feed'}</h1>
-              <p>{view === 'live' ? 'New reviews from the streaming serving layer.' : 'A closer read on how players recommend the games they play.'}</p>
+              <h1>{view === 'overview' ? 'Review intelligence' : view === 'games' ? 'Game performance' : view === 'live' ? 'Realtime review feed' : 'Predict a recommendation'}</h1>
+              <p>{view === 'live' ? 'New reviews from the streaming serving layer.' : view === 'prediction' ? 'Estimate whether a review is likely to recommend a game.' : 'A closer read on how players recommend the games they play.'}</p>
             </div>
             <div className="updated-label"><span>LAST SYNC</span><strong>{updatedAt ? updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</strong></div>
           </section>
@@ -419,6 +421,8 @@ function App() {
               )}
             </section>
           )}
+
+          {view === 'prediction' && <PredictionView />}
 
           <footer className="page-footer"><span>STEAM BIG DATA PLATFORM</span><span>READ-ONLY SERVING API</span><span>{updatedAt ? `UPDATED ${updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : 'AWAITING API'}</span></footer>
         </div>

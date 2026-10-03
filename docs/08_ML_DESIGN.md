@@ -347,13 +347,18 @@ spark-submit \
 
 ---
 
-# Current Limitations
+# Prediction Serving
 
 - MLlib V1 is batch retraining only.
 - No online learning.
-- No model serving API.
 - No automatic model promotion.
 - No A/B testing.
+
+The FastAPI prediction endpoint accepts review-time player and game features and
+loads a configured Spark `PipelineModel` from `ML_MODEL_PATH`. Set that variable
+to a specific model directory from a successful run; model promotion and automatic
+selection of the latest run are not implemented. The API runtime needs Java,
+Spark/Hadoop configuration, and access to the configured model path.
 
 ---
 

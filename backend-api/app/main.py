@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.middleware.exception_handler import register_exception_handlers
-from app.routers import analytics, health, realtime
+from app.routers import analytics, health, prediction, realtime
 
 
 
@@ -20,7 +20,7 @@ app.add_middleware(
 
     allow_origins=list(settings.CORS_ORIGINS),
 
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
 
     allow_headers=["*"]
 )
@@ -31,3 +31,4 @@ register_exception_handlers(app)
 app.include_router(health.router)
 app.include_router(analytics.router)
 app.include_router(realtime.router)
+app.include_router(prediction.router)

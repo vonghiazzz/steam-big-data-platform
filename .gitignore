@@ -45,3 +45,5 @@ logs/
 # Local Kafka / MongoDB data
 kafka-data/
 mongodb-data/
+
+local_ml/

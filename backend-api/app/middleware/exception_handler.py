@@ -4,7 +4,7 @@ from fastapi.responses import JSONResponse
 from pymongo.errors import PyMongoError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.services.exceptions import ResourceNotFoundError
+from app.services.exceptions import ModelUnavailableError, ResourceNotFoundError
 
 
 def register_exception_handlers(app: FastAPI) -> None:
@@ -44,6 +44,20 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=404,
             content={
                 "error": {"code": "RESOURCE_NOT_FOUND", "message": str(exc)}
+            },
+        )
+
+    @app.exception_handler(ModelUnavailableError)
+    async def model_unavailable_handler(
+        request: Request, exc: ModelUnavailableError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": {
+                    "code": "ML_MODEL_UNAVAILABLE",
+                    "message": str(exc),
+                }
             },
         )
 

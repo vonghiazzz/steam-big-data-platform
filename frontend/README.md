@@ -24,6 +24,8 @@ Open `http://localhost:5173`. The default API URL is `http://localhost:8000`; ov
 
 The overview and game catalog use historical analytics collections. The Live feed reads incremental reviews; an empty feed is expected until the realtime serving pipeline has received new events.
 
+The **AI prediction** view submits review-time features (playtime, purchase/free status, price, genres, categories, and supported platforms) to `POST /api/ml/predict`. Configure the backend's `ML_MODEL_PATH` to a saved Spark MLlib `PipelineModel` before using it; otherwise the API returns a model-unavailable error.
+
 ## Checks
 
 ```powershell
