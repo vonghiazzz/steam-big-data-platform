@@ -29,7 +29,7 @@ HEADERS = {
 }
 
 MAX_NO_NEW_PAGES = 3
-HISTORICAL_REVIEW_FILTER = "all"
+HISTORICAL_REVIEW_FILTER = "recent"
 
 
 def utc_now():
@@ -349,8 +349,14 @@ def crawl_game(
         )
     )
 
-    state_filter = game_state.get("review_filter", "recent")
-    same_filter_contract = state_filter == HISTORICAL_REVIEW_FILTER
+    state_filter = game_state.get(
+        "review_filter"
+    )
+
+    same_filter_contract = (
+        state_filter
+        == HISTORICAL_REVIEW_FILTER
+    )
 
     if same_filter_contract and game_state.get("status") in (
         "EXHAUSTED",
@@ -380,11 +386,19 @@ def crawl_game(
             seen_ids
         )
 
-    cursor = game_state.get("next_cursor", "*") if same_filter_contract else "*"
+    cursor = (
+        game_state.get("next_cursor", "*")
+        if same_filter_contract
+        else "*"
+    )
 
-    page_number = game_state.get(
-        "next_page_number",
-        1,
+    page_number = (
+        game_state.get(
+            "next_page_number",
+            1,
+        )
+        if same_filter_contract
+        else 1
     )
 
     print()

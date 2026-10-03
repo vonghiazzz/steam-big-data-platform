@@ -17,7 +17,7 @@ from .policy import (
 
 BASE_URL = (
     "https://store.steampowered.com/"
-    "ajaxappreviews/{appid}"
+    "appreviews/{appid}"
 )
 
 HEADERS = {
@@ -171,26 +171,14 @@ def _request_with_retry(
 
 def build_review_probe_params() -> dict:
     return {
-        "filter": "all",
-        "date_range_type": "all",
-        "day_range": 30,
-        "start_date": -1,
-        "end_date": -1,
-        "cursor": "*",
-        "filter_language": (
-            "english"
-        ),
+        "json": 1,
+        "filter": "recent",
+        "language": "english",
         "review_type": "all",
         "purchase_type": "all",
+        "num_per_page": 100,
+        "cursor": "*",
         "filter_offtopic_activity": 1,
-        "playtime_filter_min": 0,
-        "playtime_filter_max": 0,
-        "filter_review_quality": 1,
-        "filter_user_review_score": (
-            "all"
-        ),
-        "filter_deck_playtime": 0,
-        "l": "english",
     }
 
 

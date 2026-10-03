@@ -13,7 +13,7 @@ from src.ingestion.review_crawler import (
 
 
 class ReviewCrawlerTest(unittest.TestCase):
-    def test_historical_request_uses_all_filter(self):
+    def test_historical_request_uses_recent_filter(self):
         response = Mock(status_code=200)
         response.json.return_value = {"success": 1, "reviews": [], "cursor": "x"}
         session = Mock()
@@ -26,10 +26,10 @@ class ReviewCrawlerTest(unittest.TestCase):
             RetryPolicy(max_attempts=1, exponential_backoff=False),
         )
 
-        self.assertEqual("all", params["filter"])
-        self.assertEqual("all", session.get.call_args.kwargs["params"]["filter"])
+        self.assertEqual("recent", params["filter"])
+        self.assertEqual("recent", session.get.call_args.kwargs["params"]["filter"])
 
-    def test_legacy_recent_exhaustion_restarts_with_new_filter_contract(self):
+    def test_legacy_state_without_filter_restarts_with_current_contract(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             reviews_root = root / "reviews"
