@@ -130,9 +130,9 @@ class QualificationPolicyTest(unittest.TestCase):
     def test_repository_policy_defaults_load(self):
         policy = load_discovery_policy()
         self.assertEqual(1, policy.version)
-        self.assertEqual(1000, policy.qualification.min_total_reviews)
+        self.assertEqual(2000, policy.qualification.min_total_reviews)
         self.assertIsNone(policy.qualification.min_playtime_minutes)
-        self.assertEqual(500, policy.onboarding.target_reviews_per_game)
+        self.assertEqual(2000, policy.onboarding.target_reviews_per_game)
         self.assertEqual(10, policy.onboarding.max_new_games_per_cycle)
         self.assertEqual("WEEKLY", policy.discovery.frequency)
         self.assertEqual(3, policy.retry.max_attempts)

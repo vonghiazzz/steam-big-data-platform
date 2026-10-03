@@ -4,7 +4,7 @@ from pathlib import Path
 PROJECT_ROOT = (
     Path(__file__)
     .resolve()
-    .parents[3]
+    .parents[2]
 )
 
 
@@ -16,7 +16,6 @@ DATA_ROOT = (
 STEAM_RAW_ROOT = (
     DATA_ROOT
     / "raw"
-    / "steam"
 )
 
 
@@ -123,7 +122,7 @@ ARCHIVE_ROOT = (
 
 TARGET_GAME_COUNT = 50
 
-TARGET_REVIEWS_PER_GAME = 500
+TARGET_REVIEWS_PER_GAME = 2000
 
 
 HDFS_STEAM_ROOT = (
