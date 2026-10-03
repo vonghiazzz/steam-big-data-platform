@@ -2,7 +2,7 @@
 
 ## Scope and status
 
-The historical batch path is implemented through verified HDFS Bronze. PySpark Bronze-to-Silver is the immediate **In Progress** checkpoint. Silver-to-Gold is **Planned**.
+The historical batch path is implemented through verified HDFS Bronze. PySpark Bronze-to-Silver is **Implemented** (`src/processing/bronze_to_silver.py`, output at `/steam/silver/v1/` with reconciliation report at `/steam/silver/_reports/bronze_to_silver_v1.json`). Silver-to-Gold is **Planned**.
 
 ## Historical backfill
 
@@ -24,9 +24,9 @@ Ingestion Integrity Validation checks transport and structural integrity such as
 
 An existing `ACTIVE` game is handled by incremental polling and must not receive another full historical crawl during each weekly discovery cycle. A deliberate repair or rebuild is a separate auditable operation.
 
-## Bronze to Silver — next checkpoint
+## Bronze to Silver — implemented
 
-`src/batch/bronze_to_silver.py` is not yet implemented. Its required responsibilities are:
+`src/processing/bronze_to_silver.py` runs as a PySpark job on the cluster client container (PySpark copied to `bda501-client:/tmp/pylibs`, `HADOOP_CONF_DIR=/opt/hadoop/etc/hadoop`). Its responsibilities:
 
 1. Read Bronze game and review JSON/JSONL from HDFS.
 2. Apply explicit PySpark schemas rather than schema inference alone.
@@ -37,7 +37,9 @@ An existing `ACTIVE` game is handled by incremental polling and must not receive
 7. Write partitioned/organized Silver Parquet to HDFS.
 8. Produce Bronze-versus-Silver reconciliation: inputs, accepted rows, rejected rows, duplicates, and output counts.
 
-The pipeline should fail clearly on broken contracts and keep rejected-record evidence instead of silently dropping data.
+The pipeline fails clearly on broken contracts (exit code 1, zero accepted rows, or reconciliation mismatch) and keeps rejected records under `<silver>/<version>/rejected_*` with explicit reasons instead of silently dropping data.
+
+First run evidence (v1, 2026-10-03): 50/50 games accepted, 25,000/25,000 reviews accepted, 0 rejected, 0 duplicates, read-back verified (50 distinct appids, 25,000 distinct recommendationids).
 
 ## Silver to Gold — planned
 

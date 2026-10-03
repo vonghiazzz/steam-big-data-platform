@@ -18,7 +18,7 @@ Hệ thống kết hợp:
 - MongoDB cho serving layer
 - Cluster / Cloud architecture cho khả năng scale
 
-> **Implementation status:** catalog discovery, configurable qualification, local JSONL registry reconciliation/onboarding planning, initial 50-game selection, historical ingestion, validation, bronze-ready finalization, and HDFS Bronze verification are implemented. PySpark Bronze-to-Silver is the immediate next checkpoint. Production registry automation, Kafka, Structured Streaming, MapReduce, Spark SQL/EDA, MLlib, and MongoDB serving remain planned or design-only unless later evidence states otherwise.
+> **Implementation status:** catalog discovery, configurable qualification, local JSONL registry reconciliation/onboarding planning, initial 50-game selection, historical ingestion, validation, bronze-ready finalization, HDFS Bronze verification, and PySpark Bronze-to-Silver (`/steam/silver/v1/`) are implemented. Silver-to-Gold is the immediate next checkpoint. Production registry automation, Kafka, Structured Streaming, MapReduce, Spark SQL/EDA, MLlib, and MongoDB serving remain planned or design-only unless later evidence states otherwise.
 
 Tài liệu kiến trúc chi tiết bắt đầu tại [Project Overview](docs/00_PROJECT_OVERVIEW.md) và [Architecture](docs/01_ARCHITECTURE.md).
 
@@ -225,18 +225,18 @@ Discovery/qualification là scope definition dựa trên metadata completeness, 
 
 ## Discovery Policy — Current Defaults
 
-| Setting | Default |
-|---|---:|
-| Game type | `game` |
-| Minimum release age | 30 days |
-| Minimum total reviews | 1,000 |
-| Metadata | required |
-| Review endpoint | required |
-| Historical sample | 500 reviews/game |
-| Initial research cohort | 50 games |
-| Maximum new games/cycle | 10 |
-| Discovery | `WEEKLY` |
-| Retries | 3 |
+| Setting                 |          Default |
+| ----------------------- | ---------------: |
+| Game type               |           `game` |
+| Minimum release age     |          30 days |
+| Minimum total reviews   |            1,000 |
+| Metadata                |         required |
+| Review endpoint         |         required |
+| Historical sample       | 500 reviews/game |
+| Initial research cohort |         50 games |
+| Maximum new games/cycle |               10 |
+| Discovery               |         `WEEKLY` |
+| Retries                 |                3 |
 
 Các ngưỡng nằm trong `config/discovery_policy.json` và có thể thay đổi mà không sửa thuật toán. `min_playtime_minutes` mặc định là `null` (tắt), vì playtime được giữ làm feature EDA/ML. Cohort 50 game hiện tại là research snapshot có thể tái lập, không phải giới hạn kiến trúc. Admin API/UI để quản lý policy là **Planned / Design-only**; kiến trúc end-to-end không thay đổi.
 
@@ -1242,39 +1242,39 @@ Chỉ measured experiment mới được ghi là implemented evidence.
 
 # 26. Current Status
 
-| Component | Status |
-|---|---|
-| Steam discovery | Done |
-| Catalog qualification | Done |
-| Initial 50-game research cohort | Done |
-| Local JSONL Registry / onboarding plan V1 | Done |
-| Production Registry / Watchlist automation | Design-only |
-| Steam ingestion | Done |
-| Raw-data validation | Done |
-| Bronze-ready validation | Done |
-| HDFS Bronze | Done |
-| Project refactor | Done |
-| PySpark Bronze -> Silver | **Next — not yet implemented** |
-| Silver -> Gold | Planned |
-| MapReduce aggregation | Planned |
-| Spark SQL / EDA | Planned |
-| Kafka / Structured Streaming | Planned |
-| Spark MLlib | Planned |
-| MongoDB Serving | Planned |
-| Performance experiment | Planned |
-| Cluster deployment design | Planned |
-| Final report / demo | Planned |
+| Component                                  | Status                         |
+| ------------------------------------------ | ------------------------------ |
+| Steam discovery                            | Done                           |
+| Catalog qualification                      | Done                           |
+| Initial 50-game research cohort            | Done                           |
+| Local JSONL Registry / onboarding plan V1  | Done                           |
+| Production Registry / Watchlist automation | Design-only                    |
+| Steam ingestion                            | Done                           |
+| Raw-data validation                        | Done                           |
+| Bronze-ready validation                    | Done                           |
+| HDFS Bronze                                | Done                           |
+| Project refactor                           | Done                           |
+| PySpark Bronze -> Silver                   | **Next — not yet implemented** |
+| Silver -> Gold                             | Planned                        |
+| MapReduce aggregation                      | Planned                        |
+| Spark SQL / EDA                            | Planned                        |
+| Kafka / Structured Streaming               | Planned                        |
+| Spark MLlib                                | Planned                        |
+| MongoDB Serving                            | Planned                        |
+| Performance experiment                     | Planned                        |
+| Cluster deployment design                  | Planned                        |
+| Final report / demo                        | Planned                        |
 
 ---
 
 # 27. Team Responsibilities
 
-| Member | Primary Ownership |
-|---|---|
-| Bình | HDFS, MapReduce, Raw Validation |
-| Khánh | PySpark Data Engineering, Streaming |
-| Nghĩa | EDA, Spark SQL, Visualization, NoSQL |
-| Huy | Machine Learning, Performance, Deployment |
+| Member | Primary Ownership                         |
+| ------ | ----------------------------------------- |
+| Bình   | HDFS, MapReduce, Raw Validation           |
+| Khánh  | PySpark Data Engineering, Streaming       |
+| Nghĩa  | EDA, Spark SQL, Visualization, NoSQL      |
+| Huy    | Machine Learning, Performance, Deployment |
 
 Cross-checks được thực hiện ở integration checkpoints.
 
