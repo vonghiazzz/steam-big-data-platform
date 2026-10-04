@@ -143,6 +143,14 @@ def resolve_stream_paths() -> StreamPaths:
     )
 
 
+def resolve_historical_silver_paths() -> tuple[str, str]:
+    """Resolve historical Silver inputs, with overrides for local runs."""
+    return (
+        os.getenv("STREAM_SILVER_GAMES_PATH", HDFS_SILVER_GAMES),
+        os.getenv("STREAM_SILVER_REVIEWS_PATH", HDFS_SILVER_REVIEWS),
+    )
+
+
 def parse_and_classify_events(
     kafka_df: DataFrame,
     games_df: DataFrame,
@@ -420,7 +428,7 @@ def _mongodb_sink(
 
 
 def _start_mongodb_queries(
-    incremental_reviews: DataFrame,
+    incremental_gold: DataFrame,
     *,
     config: RealtimeMongoConfig,
     paths: StreamPaths,
@@ -428,7 +436,7 @@ def _start_mongodb_queries(
     trigger_interval: str,
     available_now: bool,
 ) -> list:
-    recent_reviews = prepare_recent_reviews(incremental_reviews)
+    recent_reviews = prepare_recent_reviews(incremental_gold)
     realtime_metrics = build_realtime_game_metrics(
         recent_reviews,
         watermark_delay,
@@ -455,6 +463,7 @@ def _start_mongodb_queries(
 def main() -> None:
     load_dotenv(PROJECT_ROOT / ".env", override=False)
     paths = resolve_stream_paths()
+    silver_games_path, silver_reviews_path = resolve_historical_silver_paths()
     hdfs_default_fs = os.getenv(
         "HDFS_DEFAULT_FS",
         "hdfs://bda501-namenode.orb.local:8020",
@@ -508,8 +517,8 @@ def main() -> None:
     for path in output_paths:
         _ensure_path(spark, path)
 
-    games = spark.read.parquet(HDFS_SILVER_GAMES).cache()
-    baseline_reviews = spark.read.parquet(HDFS_SILVER_REVIEWS).select(
+    games = spark.read.parquet(silver_games_path).cache()
+    baseline_reviews = spark.read.parquet(silver_reviews_path).select(
         "recommendationid"
     )
 
@@ -595,7 +604,7 @@ def main() -> None:
             if mongodb_config is not None:
                 queries.extend(
                     _start_mongodb_queries(
-                        incremental_reviews,
+                        gold,
                         config=mongodb_config,
                         paths=paths,
                         watermark_delay=watermark_delay,
@@ -617,7 +626,7 @@ def main() -> None:
             if mongodb_config is not None:
                 queries.extend(
                     _start_mongodb_queries(
-                        incremental_reviews,
+                        gold,
                         config=mongodb_config,
                         paths=paths,
                         watermark_delay=watermark_delay,

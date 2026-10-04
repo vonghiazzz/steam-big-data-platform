@@ -22,6 +22,7 @@ from src.streaming.review_streaming import (
     parse_and_classify_events,
     quarantine_projection,
     remove_batch_baseline_ids,
+    resolve_historical_silver_paths,
     resolve_stream_paths,
 )
 
@@ -176,6 +177,22 @@ class StreamingSparkV1Test(unittest.TestCase):
             paths.mongodb_metrics_checkpoint,
             "/steam/test/checkpoints/mongodb/realtime_game_metrics",
         )
+
+    def test_historical_silver_paths_can_be_overridden_for_local_runs(self):
+        with patch.dict(
+            "os.environ",
+            {
+                "STREAM_SILVER_GAMES_PATH": "file:///tmp/silver/games",
+                "STREAM_SILVER_REVIEWS_PATH": "file:///tmp/silver/reviews",
+            },
+        ):
+            self.assertEqual(
+                resolve_historical_silver_paths(),
+                (
+                    "file:///tmp/silver/games",
+                    "file:///tmp/silver/reviews",
+                ),
+            )
 
     def test_file_stream_checkpoint_restart_does_not_replay(self):
         root = Path(self.temp.name) / "checkpoint-restart"

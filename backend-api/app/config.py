@@ -11,6 +11,7 @@ class Settings:
     MONGO_DATABASE = os.getenv("MONGO_DATABASE", "steam_analytics")
     ML_MODEL_PATH = os.getenv("ML_MODEL_PATH", "").strip()
     HDFS_DEFAULT_FS = os.getenv("HDFS_DEFAULT_FS", "").strip()
+    HADOOP_HOME = os.getenv("HADOOP_HOME", "").strip()
     SPARK_MASTER = os.getenv("SPARK_MASTER", "local[2]").strip()
     CORS_ORIGINS = tuple(
         origin.strip()

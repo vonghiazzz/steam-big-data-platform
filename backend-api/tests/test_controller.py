@@ -7,7 +7,7 @@ from app.routers.analytics import get_analytics_service
 from app.routers.health import get_health_service
 from app.routers.prediction import get_prediction_service
 from app.routers.realtime import get_realtime_service
-from app.schemas.prediction import PredictionResponse
+from app.schemas.prediction import PredictionExplanation, PredictionResponse
 from app.services.exceptions import ModelUnavailableError, ResourceNotFoundError
 
 
@@ -63,6 +63,24 @@ class FakePredictionService:
             prediction=1,
             recommended=True,
             probability_positive=0.82,
+            explanation=PredictionExplanation(
+                baseline_probability=0.5,
+                baseline_description="Unspecified reference profile.",
+                local_shap=[
+                    {
+                        "attribute": "price",
+                        "label": "Game price",
+                        "value": 0.32,
+                    }
+                ],
+                global_importance=[
+                    {
+                        "attribute": "price",
+                        "label": "Game price",
+                        "value": 0.4,
+                    }
+                ],
+            ),
         )
 
 
@@ -189,6 +207,25 @@ def test_ml_prediction_endpoint_returns_model_result(client):
         "prediction": 1,
         "recommended": True,
         "probability_positive": 0.82,
+        "explanation": {
+            "baseline_probability": 0.5,
+            "baseline_description": "Unspecified reference profile.",
+            "local_shap": [
+                {
+                    "attribute": "price",
+                    "label": "Game price",
+                    "value": 0.32,
+                }
+            ],
+            "global_importance": [
+                {
+                    "attribute": "price",
+                    "label": "Game price",
+                    "value": 0.4,
+                }
+            ],
+            "what_if_effects": [],
+        },
     }
 
 
