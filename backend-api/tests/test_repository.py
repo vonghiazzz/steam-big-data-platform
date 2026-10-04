@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 from bson import ObjectId
 
 from app.repositories import analytics_repository, realtime_repository
+from app.repositories.analytics_repository import _merge_count_metrics
 
 
 class FakeCursor:
@@ -50,21 +51,152 @@ def test_find_all_hides_mongo_id_and_converts_nested_object_ids(monkeypatch):
 
 
 def test_find_top_games_sorts_and_limits(monkeypatch):
-    cursor = FakeCursor([{"_id": 730, "appid": 730, "recommendation_rate": 0.9}])
+    cursor = FakeCursor(
+        [
+            {
+                "_id": 730,
+                "appid": 730,
+                "review_count": 10,
+                "positive_reviews": 9,
+                "negative_reviews": 1,
+                "recommendation_rate": 0.9,
+            },
+            {
+                "_id": 570,
+                "appid": 570,
+                "review_count": 20,
+                "positive_reviews": 16,
+                "negative_reviews": 4,
+                "recommendation_rate": 0.8,
+            },
+        ]
+    )
     collection = MagicMock(find=MagicMock(return_value=cursor))
+    streamed = FakeCursor([])
     monkeypatch.setattr(
-        analytics_repository, "get_collection", lambda name: collection
+        analytics_repository,
+        "get_collection",
+        lambda name: collection if name == "game_metrics" else MagicMock(
+            aggregate=MagicMock(return_value=streamed)
+        ),
     )
 
     from app.repositories.analytics_repository import AnalyticsRepository
 
     result = asyncio.run(AnalyticsRepository().find_top_games(5))
 
-    assert result == [{"appid": 730, "recommendation_rate": 0.9}]
-    assert cursor.sort_args == (
-        [("recommendation_rate", -1), ("review_count", -1), ("appid", 1)],
+    assert result == [
+        {
+            "appid": 730,
+            "review_count": 10,
+            "positive_reviews": 9,
+            "negative_reviews": 1,
+            "recommendation_rate": 0.9,
+            "batch_review_count": 10,
+            "stream_review_count": 0,
+        },
+        {
+            "appid": 570,
+            "review_count": 20,
+            "positive_reviews": 16,
+            "negative_reviews": 4,
+            "recommendation_rate": 0.8,
+            "batch_review_count": 20,
+            "stream_review_count": 0,
+        },
+    ]
+
+
+def test_hybrid_game_metrics_add_incremental_stream_reviews():
+    result = _merge_count_metrics(
+        [
+            {
+                "appid": 730,
+                "game_name": "Counter-Strike 2",
+                "review_count": 500,
+                "positive_reviews": 400,
+                "negative_reviews": 100,
+                "recommendation_rate": 0.8,
+                "serving_snapshot": "historical_v1",
+            }
+        ],
+        [
+            {
+                "_id": 730,
+                "game_name": "Counter-Strike 2",
+                "review_count": 6,
+                "positive_reviews": 4,
+                "negative_reviews": 2,
+            }
+        ],
+        "appid",
     )
-    assert cursor.limit_value == 5
+
+    assert result == [
+        {
+            "appid": 730,
+            "game_name": "Counter-Strike 2",
+            "review_count": 506,
+            "positive_reviews": 404,
+            "negative_reviews": 102,
+            "recommendation_rate": 404 / 506,
+            "serving_snapshot": "batch_plus_streaming",
+            "batch_review_count": 500,
+            "stream_review_count": 6,
+        }
+    ]
+
+
+def test_find_all_combines_batch_and_stream_metrics(monkeypatch):
+    batch_cursor = FakeCursor(
+        [
+            {
+                "_id": 730,
+                "appid": 730,
+                "game_name": "Counter-Strike 2",
+                "review_count": 500,
+                "positive_reviews": 400,
+                "negative_reviews": 100,
+                "recommendation_rate": 0.8,
+            }
+        ]
+    )
+    stream_cursor = FakeCursor(
+        [
+            {
+                "_id": 730,
+                "game_name": "Counter-Strike 2",
+                "review_count": 6,
+                "positive_reviews": 4,
+                "negative_reviews": 2,
+                "recommendation_rate": 4 / 6,
+            }
+        ]
+    )
+    batch_collection = MagicMock(find=MagicMock(return_value=batch_cursor))
+    stream_collection = MagicMock(
+        aggregate=MagicMock(return_value=stream_cursor)
+    )
+    monkeypatch.setattr(
+        analytics_repository,
+        "get_collection",
+        lambda name: {
+            "game_metrics": batch_collection,
+            "recent_reviews": stream_collection,
+        }[name],
+    )
+
+    result = asyncio.run(
+        analytics_repository.AnalyticsRepository().find_all("game_metrics")
+    )
+
+    assert result[0]["review_count"] == 506
+    assert result[0]["batch_review_count"] == 500
+    assert result[0]["stream_review_count"] == 6
+    assert result[0]["positive_reviews"] == 404
+    assert result[0]["recommendation_rate"] == 404 / 506
+    assert result[0]["serving_snapshot"] == "batch_plus_streaming"
+    stream_collection.aggregate.assert_called_once()
 
 
 def test_find_reviews_filters_and_applies_pagination(monkeypatch):

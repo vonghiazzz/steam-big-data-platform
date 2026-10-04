@@ -38,6 +38,21 @@ For interactive ML prediction, install the dependencies in this directory and co
 | `GET /api/realtime/games/{appid}`       | `realtime_game_metrics` | Windowed metrics for one game; 404 if absent             |
 | `POST /api/ml/predict`                  | Spark MLlib model       | Classifies a hypothetical review from its features        |
 
+The prediction response includes exact grouped SHAP contributions for the eight
+input attributes, computed against an explicitly unspecified reference profile,
+and Random Forest impurity-based global feature importance aggregated by input
+attribute. Local SHAP values explain one prediction relative to that reference;
+global importance describes the fitted model overall and is not causal.
+When the client supplies genre/category options, the response also contains a
+one-at-a-time what-if score for adding each unselected option or removing each
+selected option. These deltas hold all other input fields fixed; they are
+counterfactual comparisons, not SHAP values, and do not capture interactions
+between multiple simultaneous changes.
+
+On Windows, set `HADOOP_HOME` in `backend-api/.env` to a Hadoop directory that
+contains `bin/hadoop.dll` and `bin/winutils.exe`. The prediction service adds
+that `bin` directory to the environment before starting Spark's Java gateway.
+
 Review pagination defaults to `page=1` and `page_size=20`; page size is limited to 100. Successful collection responses use a `data` array. Review responses also include `page`, `page_size`, and `total`. Errors use an `error` object with a stable code and sanitized message.
 
 The prediction request accepts `playtime_at_review` (minutes), `steam_purchase`, `received_for_free`, `is_free`, `price`, `genres`, `categories`, and `platforms` (`windows`, `mac`, `linux`). Unknown scalar/boolean values may be `null`; genres and categories are arrays of strings. The response contains `prediction` (`1` = recommended, `0` = not recommended), `recommended`, `probability_positive`, `model_name`, and `model_run_id`. The model probability is a confidence score, not a guarantee of calibration.

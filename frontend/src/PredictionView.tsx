@@ -7,6 +7,27 @@ type PredictionResult = {
   prediction: 0 | 1
   recommended: boolean
   probability_positive: number
+  explanation: {
+    baseline_probability: number
+    baseline_description: string
+    local_shap: FeatureContribution[]
+    global_importance: FeatureContribution[]
+    what_if_effects: WhatIfFeatureEffect[]
+  }
+}
+
+type FeatureContribution = {
+  attribute: string
+  label: string
+  value: number
+}
+
+type WhatIfFeatureEffect = {
+  feature_type: 'genre' | 'category'
+  value: string
+  selected: boolean
+  probability_after_toggle: number
+  probability_delta: number
 }
 
 type Tri = 'unknown' | 'yes' | 'no'
@@ -59,6 +80,10 @@ function formatPercent(value: number) {
   return `${(value * 100).toFixed(1)}%`
 }
 
+function formatPercentagePoints(value: number) {
+  return `${value > 0 ? '+' : ''}${(value * 100).toFixed(1)} pp`
+}
+
 function pick<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)]
 }
@@ -104,10 +129,12 @@ export default function PredictionView() {
   const [error, setError] = useState('')
 
   function update<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setResult(null)
     setForm((current) => ({ ...current, [key]: value }))
   }
 
   function setFree(value: Tri) {
+    setResult(null)
     setForm((current) => ({
       ...current,
       isFree: value,
@@ -116,6 +143,7 @@ export default function PredictionView() {
   }
 
   function toggle(key: 'genres' | 'categories', value: string) {
+    setResult(null)
     setForm((current) => ({
       ...current,
       [key]: current[key].includes(value)
@@ -139,6 +167,10 @@ export default function PredictionView() {
       genres: form.genres,
       categories: form.categories,
       platforms: { windows: form.windows, mac: form.mac, linux: form.linux },
+      what_if_options: {
+        genres: GENRE_OPTIONS,
+        categories: CATEGORY_OPTIONS,
+      },
     }
 
     try {
@@ -150,6 +182,16 @@ export default function PredictionView() {
       const body = await response.json()
       if (!response.ok) {
         throw new Error(body?.error?.message || `Request failed (${response.status})`)
+      }
+      if (
+        !body?.explanation
+        || !Array.isArray(body.explanation.local_shap)
+        || !Array.isArray(body.explanation.global_importance)
+        || !Array.isArray(body.explanation.what_if_effects)
+      ) {
+        throw new Error(
+          'The backend is running an older prediction API. Restart it to enable model explanations.',
+        )
       }
       setResult(body as PredictionResult)
     } catch (predictionError) {
@@ -247,7 +289,7 @@ export default function PredictionView() {
 
         {error && <div className="prediction-error" role="alert">{error}</div>}
         <button className="prediction-submit" type="submit" disabled={loading}>
-          {loading ? 'Predicting…' : 'Predict recommendation'}
+          {loading ? 'Predicting + explaining…' : 'Predict recommendation'}
           {!loading && <ArrowRight size={16} />}
         </button>
       </form>
@@ -275,6 +317,96 @@ export default function PredictionView() {
               <div><dt>Model</dt><dd>{result.model_name.replaceAll('_', ' ')}</dd></div>
               <div><dt>Training run</dt><dd>{result.model_run_id || 'Configured model'}</dd></div>
             </dl>
+            <section className="prediction-explanation" aria-label="Prediction explanation">
+              <div className="explanation-heading">
+                <strong>Why this prediction?</strong>
+                <span>SHAP</span>
+              </div>
+              <p className="explanation-note">
+                Positive values raise the positive-review probability; negative
+                values lower it. Baseline: {formatPercent(result.explanation.baseline_probability)}.
+                {' '}{result.explanation.baseline_description}
+              </p>
+              <div className="explanation-list">
+                {result.explanation.local_shap.slice(0, 6).map((item) => {
+                  const maxValue = Math.max(
+                    ...result.explanation.local_shap.map((entry) => Math.abs(entry.value)),
+                    0.0001,
+                  )
+                  const width = Math.abs(item.value) / maxValue * 50
+                  return (
+                    <div className="explanation-item" key={item.attribute}>
+                      <div className="explanation-item-label">
+                        <span>{item.label}</span>
+                        <strong className={item.value >= 0 ? 'is-positive' : 'is-negative'}>
+                          {formatPercentagePoints(item.value)}
+                        </strong>
+                      </div>
+                      <div className="explanation-track" aria-hidden="true">
+                        <i
+                          className={`explanation-fill ${item.value >= 0 ? 'is-positive' : 'is-negative'}`}
+                          style={{
+                            left: item.value >= 0 ? '50%' : `${50 - width}%`,
+                            width: `${width}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="explanation-global">
+                <div className="explanation-heading">
+                  <strong>Global feature importance</strong>
+                  <span>Random Forest</span>
+                </div>
+                <p className="explanation-note">
+                  Overall model importance, not a cause-and-effect measure for this review.
+                </p>
+                <div className="explanation-list">
+                  {result.explanation.global_importance.slice(0, 6).map((item) => {
+                    const maxValue = Math.max(
+                      ...result.explanation.global_importance.map((entry) => entry.value),
+                      0.0001,
+                    )
+                    return (
+                      <div className="explanation-item" key={item.attribute}>
+                        <div className="explanation-item-label">
+                          <span>{item.label}</span>
+                          <strong>{formatPercent(item.value)}</strong>
+                        </div>
+                        <div className="explanation-global-track" aria-hidden="true">
+                          <i style={{ width: `${item.value / maxValue * 100}%` }} />
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+              <section className="explanation-what-if" aria-label="Category and genre what-if effects">
+                <div className="explanation-heading">
+                  <strong>Try adding or removing one at a time</strong>
+                  <span>What-if</span>
+                </div>
+                <p className="explanation-note">
+                  Keeps every other field unchanged. The delta shows how the
+                  predicted positive-review probability changes for this input.
+                </p>
+                <WhatIfList
+                  title="Categories"
+                  effects={result.explanation.what_if_effects.filter((item) => item.feature_type === 'category')}
+                  onToggle={(item) => toggle('categories', item.value)}
+                />
+                <WhatIfList
+                  title="Genres"
+                  effects={result.explanation.what_if_effects.filter((item) => item.feature_type === 'genre')}
+                  onToggle={(item) => toggle('genres', item.value)}
+                />
+                <p className="explanation-note">
+                  Click an option to update the form, then run the prediction again.
+                </p>
+              </section>
+            </section>
             <p className="prediction-disclaimer">
               This is a model estimate, not a guarantee. The probability is a model
               confidence score and may not be calibrated.
@@ -289,6 +421,62 @@ export default function PredictionView() {
         )}
       </aside>
     </section>
+  )
+}
+
+function WhatIfList({
+  title,
+  effects,
+  onToggle,
+}: {
+  title: string
+  effects: WhatIfFeatureEffect[]
+  onToggle: (effect: WhatIfFeatureEffect) => void
+}) {
+  const strongest = effects.slice(0, 3)
+  const weakest = [...effects].sort((left, right) => left.probability_delta - right.probability_delta).slice(0, 3)
+  const featured = [...new Map(
+    [...strongest, ...weakest].map((item) => [item.value, item]),
+  ).values()]
+
+  function effectLabel(effect: WhatIfFeatureEffect) {
+    const action = effect.selected ? 'Remove' : 'Add'
+    const delta = formatPercentagePoints(effect.probability_delta)
+    return {
+      action,
+      delta,
+      tone: effect.probability_delta >= 0 ? 'is-positive' : 'is-negative',
+    }
+  }
+
+  function renderEffect(effect: WhatIfFeatureEffect) {
+    const label = effectLabel(effect)
+    return (
+      <div className="what-if-item" key={effect.value}>
+        <button
+          type="button"
+          className="what-if-action"
+          aria-label={`${label.action} ${effect.value} ${title.toLowerCase()}`}
+          onClick={() => onToggle(effect)}
+        >
+          <small>{label.action}</small> {effect.value}
+        </button>
+        <strong className={label.tone}>{label.delta}</strong>
+      </div>
+    )
+  }
+
+  return (
+    <div className="what-if-group">
+      <strong className="what-if-title">{title}</strong>
+      <div className="what-if-list">{featured.map(renderEffect)}</div>
+      {effects.length > featured.length && (
+        <details className="what-if-details">
+          <summary>See all {effects.length} options</summary>
+          <div className="what-if-list">{effects.map(renderEffect)}</div>
+        </details>
+      )}
+    </div>
   )
 }
 

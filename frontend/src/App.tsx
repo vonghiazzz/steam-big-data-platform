@@ -37,6 +37,8 @@ type Game = {
   appid: number
   game_name: string
   review_count: number
+  batch_review_count?: number
+  stream_review_count?: number
   positive_reviews: number
   negative_reviews: number
   recommendation_rate: number
@@ -50,15 +52,29 @@ type GroupMetric = {
   positive_reviews: number
   negative_reviews: number
   recommendation_rate: number
+  batch_review_count?: number
+  stream_review_count?: number
   avg_playtime_hours?: number | null
 }
 
 type Review = {
   recommendationid: string
   appid: number
+  game_name?: string
   voted_up: boolean | null
   playtime_at_review: number | null
   timestamp_created: string
+}
+
+type RealtimeMetric = {
+  appid: number
+  game_name?: string
+  window_start: string
+  window_end: string
+  review_count: number
+  positive_reviews: number
+  negative_reviews: number
+  recommendation_rate: number
 }
 
 type DashboardData = {
@@ -68,6 +84,7 @@ type DashboardData = {
   freePaid: GroupMetric[]
   reviews: Review[]
   reviewTotal: number
+  realtimeGames: RealtimeMetric[]
 }
 
 const apiBase = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/$/, '')
@@ -80,6 +97,7 @@ const emptyData: DashboardData = {
   freePaid: [],
   reviews: [],
   reviewTotal: 0,
+  realtimeGames: [],
 }
 
 async function getJson<T>(path: string): Promise<T> {
@@ -131,14 +149,15 @@ function App() {
 
     async function loadDashboard() {
       try {
-        const [games, genres, playtime, freePaid, reviews] = await Promise.all([
+        const [games, genres, playtime, freePaid, reviews, realtimeGames] = await Promise.all([
           getJson<{ data: Game[] }>('/api/analytics/games'),
           getJson<{ data: GroupMetric[] }>('/api/analytics/genres'),
           getJson<{ data: GroupMetric[] }>('/api/analytics/playtime'),
           getJson<{ data: GroupMetric[] }>('/api/analytics/free-paid'),
           getJson<{ data: Review[]; total: number }>(
-            '/api/realtime/reviews?page=1&page_size=6',
+            '/api/realtime/reviews?page=1&page_size=20',
           ),
+          getJson<{ data: RealtimeMetric[] }>('/api/realtime/games'),
         ])
 
         if (active) {
@@ -149,6 +168,7 @@ function App() {
             freePaid: freePaid.data,
             reviews: reviews.data,
             reviewTotal: reviews.total,
+            realtimeGames: realtimeGames.data,
           })
           setUpdatedAt(new Date())
           setError('')
@@ -168,10 +188,78 @@ function App() {
     }
   }, [refreshKey])
 
+  useEffect(() => {
+    if (view !== 'overview' && view !== 'games' && view !== 'live') return
+    let active = true
+    let inFlight = false
+
+    async function refreshRealtimeData() {
+      if (!active || inFlight) return
+      inFlight = true
+      try {
+        const [games, genres, playtime, freePaid, reviews, realtimeGames] = await Promise.all([
+          getJson<{ data: Game[] }>('/api/analytics/games'),
+          getJson<{ data: GroupMetric[] }>('/api/analytics/genres'),
+          getJson<{ data: GroupMetric[] }>('/api/analytics/playtime'),
+          getJson<{ data: GroupMetric[] }>('/api/analytics/free-paid'),
+          getJson<{ data: Review[]; total: number }>(
+            '/api/realtime/reviews?page=1&page_size=20',
+          ),
+          getJson<{ data: RealtimeMetric[] }>('/api/realtime/games'),
+        ])
+        if (active) {
+          setDashboard((current) => ({
+            ...current,
+            games: games.data,
+            genres: genres.data,
+            playtime: playtime.data,
+            freePaid: freePaid.data,
+            reviews: reviews.data,
+            reviewTotal: reviews.total,
+            realtimeGames: realtimeGames.data,
+          }))
+          setUpdatedAt(new Date())
+          setError('')
+        }
+      } catch (loadError) {
+        if (active) {
+          setError(loadError instanceof Error ? loadError.message : 'Unable to load realtime data')
+        }
+      } finally {
+        inFlight = false
+      }
+    }
+
+    void refreshRealtimeData()
+    const interval = window.setInterval(() => void refreshRealtimeData(), 15_000)
+    return () => {
+      active = false
+      window.clearInterval(interval)
+    }
+  }, [view])
+
   const totalReviews = dashboard.games.reduce((total, game) => total + game.review_count, 0)
+  const batchReviewTotal = dashboard.games.reduce(
+    (total, game) => total + (game.batch_review_count ?? game.review_count),
+    0,
+  )
   const positiveReviews = dashboard.games.reduce((total, game) => total + game.positive_reviews, 0)
   const negativeReviews = dashboard.games.reduce((total, game) => total + game.negative_reviews, 0)
   const recommendationRate = totalReviews ? positiveReviews / totalReviews : 0
+  const gameNamesByAppId = new Map(
+    dashboard.games.map((game) => [game.appid, game.game_name]),
+  )
+  const latestRealtimeGames = dashboard.realtimeGames.reduce<RealtimeMetric[]>(
+    (latest, metric) => {
+      if (!latest.some((entry) => entry.appid === metric.appid)) latest.push(metric)
+      return latest
+    },
+    [],
+  )
+  function gameNameForReview(review: Review) {
+    return review.game_name?.trim() || gameNamesByAppId.get(review.appid) || 'Unknown game'
+  }
+
   const sortedGames = [...dashboard.games].sort(
     (left, right) => right.recommendation_rate - left.recommendation_rate,
   )
@@ -228,8 +316,8 @@ function App() {
         <div className="sidebar-bottom">
           <div className="source-card">
             <div className="source-card-top"><span className="source-pulse" /> DATA SOURCE</div>
-            <strong>Historical snapshot</strong>
-            <span>{loading ? '—' : formatNumber(dashboard.games.length)} games · {loading? '—': formatNumber(Number(totalReviews ?? 0) + Number(dashboard?.reviewTotal ?? 0))}  reviews</span>
+            <strong>Batch + streaming</strong>
+            <span>{loading ? '—' : formatNumber(dashboard.games.length)} games · {loading ? '—' : formatNumber(totalReviews)} total reviews</span>
           </div>
           <div className="sidebar-footer"><span>LOCAL ENVIRONMENT</span><span className="online-dot" /> CONNECTED</div>
         </div>
@@ -252,11 +340,22 @@ function App() {
         <div className="page-wrap">
           <section className="page-heading">
             <div>
-              <div className="eyebrow"><span className="eyebrow-line" /> HISTORICAL ANALYTICS <span className="snapshot-tag">V1 SNAPSHOT</span></div>
+              <div className="eyebrow"><span className="eyebrow-line" />{view === 'live' ? ' REALTIME STREAM' : view === 'prediction' ? ' MODEL INFERENCE' : ' BATCH + REALTIME ANALYTICS'}{view === 'live' || view === 'overview' || view === 'games' ? <span className="snapshot-tag">AUTO REFRESH · 15S</span> : null}</div>
               <h1>{view === 'overview' ? 'Review intelligence' : view === 'games' ? 'Game performance' : view === 'live' ? 'Realtime review feed' : 'Predict a recommendation'}</h1>
-              <p>{view === 'live' ? 'New reviews from the streaming serving layer.' : view === 'prediction' ? 'Estimate whether a review is likely to recommend a game.' : 'A closer read on how players recommend the games they play.'}</p>
+              <p>{view === 'live' ? 'New reviews from the streaming serving layer. The API refreshes every 15 seconds; the current Steam producer polls every 5 minutes.' : view === 'prediction' ? 'Estimate whether a review is likely to recommend a game.' : 'Combined historical batch baseline and newly streamed reviews. Analytics refresh every 15 seconds; new Steam data arrives on the producer poll, currently every 5 minutes.'}</p>
             </div>
-            <div className="updated-label"><span>LAST SYNC</span><strong>{updatedAt ? updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</strong></div>
+            <div className="updated-label">
+              <span>{view === 'live' || view === 'overview' || view === 'games' ? 'API REFRESH' : 'LAST SYNC'}</span>
+              <strong>
+                {updatedAt
+                  ? updatedAt.toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: view === 'live' || view === 'overview' || view === 'games' ? '2-digit' : undefined,
+                    })
+                  : '—'}
+              </strong>
+            </div>
           </section>
 
           {error && (
@@ -269,11 +368,11 @@ function App() {
 
           {view === 'overview' && (
             <>
-              <section className="kpi-grid" aria-label="Snapshot summary">
+              <section className="kpi-grid" aria-label="Combined batch and streaming summary">
                 <article className="kpi-card kpi-primary">
                   <div className="kpi-top"><span>TOTAL REVIEWS</span><span className="kpi-icon"><BarChart3 size={17} /></span></div>
-                  <div className="kpi-value">{loading? '—': formatNumber(Number(totalReviews ?? 0) + Number(dashboard?.reviewTotal ?? 0))} </div>
-                  <div className="kpi-foot"><span className="kpi-marker" />Across the selected game sample</div>
+                  <div className="kpi-value">{loading ? '—' : formatNumber(totalReviews)}</div>
+                  <div className="kpi-foot"><span className="kpi-marker" />{formatNumber(batchReviewTotal)} batch + {formatNumber(dashboard.reviewTotal)} streamed</div>
                 </article>
                 <article className="kpi-card">
                   <div className="kpi-top"><span>GAMES TRACKED</span><span className="kpi-icon"><Gamepad2 size={17} /></span></div>
@@ -378,7 +477,7 @@ function App() {
                       {dashboard.reviews.slice(0, 3).map((review) => (
                         <div className="review-row" key={review.recommendationid}>
                           <span className={`review-vote ${review.voted_up ? 'is-positive' : 'is-negative'}`}>{review.voted_up ? <ThumbsUp size={14} /> : <ArrowDownRight size={14} />}</span>
-                          <div className="review-copy"><strong>App {review.appid}</strong><span>{review.playtime_at_review == null ? 'Playtime unavailable' : `${(review.playtime_at_review / 60).toFixed(1)}h at review`}</span></div>
+                          <div className="review-copy"><strong>{gameNameForReview(review)}</strong><span>{review.playtime_at_review == null ? 'Playtime unavailable' : `${(review.playtime_at_review / 60).toFixed(1)}h at review`}</span></div>
                           <time>{new Date(review.timestamp_created).toLocaleDateString()}</time>
                         </div>
                       ))}
@@ -396,7 +495,7 @@ function App() {
           {view === 'games' && (
             <section className="panel games-view-panel">
               <div className="games-toolbar">
-                <div><span className="panel-kicker">GAME CATALOG</span><h2>{formatNumber(dashboard.games.length)} games in snapshot</h2></div>
+                <div><span className="panel-kicker">BATCH + STREAMING GAME METRICS</span><h2>{formatNumber(dashboard.games.length)} games tracked</h2></div>
                 <label className="search-box"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search game or app ID" /><kbd>/</kbd></label>
               </div>
               <GameTable games={visibleGames} loading={loading} />
@@ -405,13 +504,24 @@ function App() {
 
           {view === 'live' && (
             <section className="panel live-view-panel">
-              <div className="live-view-heading"><div><span className="panel-kicker">INCREMENTAL SERVING · V2</span><h2>Recent review events</h2><p>Only newly observed reviews are included; historical baseline reviews are intentionally excluded.</p></div><span className="waiting-pill"><span className="status-dot" /> {dashboard.reviewTotal ? `${formatNumber(dashboard.reviewTotal)} EVENTS` : 'WAITING FOR EVENTS'}</span></div>
+              <div className="live-view-heading"><div><span className="panel-kicker">INCREMENTAL SERVING · V2</span><h2>Recent review events</h2><p>Only newly observed reviews are included; historical baseline reviews are intentionally excluded. The stream ingests on the producer polling schedule, and this page checks the API every 15 seconds.</p></div><span className="waiting-pill"><span className="status-dot" /> {dashboard.reviewTotal ? `${formatNumber(dashboard.reviewTotal)} EVENTS` : 'WAITING FOR EVENTS'}</span></div>
+              {latestRealtimeGames.length > 0 && (
+                <div className="live-metrics-grid" aria-label="Latest realtime window metrics">
+                  {latestRealtimeGames.map((metric) => (
+                    <article className="live-metric-card" key={metric.appid}>
+                      <span>{metric.game_name || gameNamesByAppId.get(metric.appid) || 'Unknown game'}</span>
+                      <strong>{formatNumber(metric.review_count)} <small>reviews / 1h window</small></strong>
+                      <em>{formatPercent(metric.recommendation_rate)} positive</em>
+                    </article>
+                  ))}
+                </div>
+              )}
               {loading ? <div className="review-skeleton large" /> : dashboard.reviews.length ? (
                 <div className="review-list live-list">
                   {dashboard.reviews.map((review) => (
                     <div className="review-row" key={review.recommendationid}>
                       <span className={`review-vote ${review.voted_up ? 'is-positive' : 'is-negative'}`}>{review.voted_up ? <ThumbsUp size={14} /> : <ArrowDownRight size={14} />}</span>
-                      <div className="review-copy"><strong>App {review.appid}</strong><span>Review #{review.recommendationid} · {review.playtime_at_review == null ? 'Playtime unavailable' : `${(review.playtime_at_review / 60).toFixed(1)}h at review`}</span></div>
+                      <div className="review-copy"><strong>{gameNameForReview(review)}</strong><span>Review #{review.recommendationid} · {review.playtime_at_review == null ? 'Playtime unavailable' : `${(review.playtime_at_review / 60).toFixed(1)}h at review`}</span></div>
                       <time>{new Date(review.timestamp_created).toLocaleString()}</time>
                     </div>
                   ))}
@@ -435,7 +545,7 @@ function GameTable({ games, compact = false, loading = false, onViewAll }: { gam
   return (
     <section className={`panel game-table-panel ${compact ? 'is-compact' : ''}`}>
       <div className="panel-heading table-heading">
-        <div><span className="panel-kicker">GAME RANKING</span><h2>{compact ? 'Standout games' : 'All games'}</h2></div>
+        <div><span className="panel-kicker">BATCH + STREAMING · REVIEW COUNTS</span><h2>{compact ? 'Standout games' : 'All games'}</h2></div>
         {compact && <button className="text-action" type="button" onClick={onViewAll}>View all <ArrowUpRight size={14} /></button>}
       </div>
       <div className="table-scroll">
@@ -445,7 +555,14 @@ function GameTable({ games, compact = false, loading = false, onViewAll }: { gam
             {loading ? <tr><td colSpan={4} className="table-empty">Loading game metrics…</td></tr> : games.length ? games.map((game, index) => (
               <tr key={game.appid}>
                 <td><div className="game-cell"><span className="rank-number">{String(index + 1).padStart(2, '0')}</span><SteamCover game={game} /><div className="game-name"><strong>{game.game_name}</strong><span>APP {game.appid}</span></div></div></td>
-                <td><strong className="volume-number">{formatNumber(game.review_count)}</strong></td>
+                <td>
+                  <strong className="volume-number">{formatNumber(game.review_count)}</strong>
+                  {game.batch_review_count !== undefined && game.stream_review_count !== undefined && game.stream_review_count > 0 && (
+                    <span className="volume-breakdown">
+                      {formatNumber(game.batch_review_count)} batch + {formatNumber(game.stream_review_count)} live
+                    </span>
+                  )}
+                </td>
                 <td><div className="vote-cell"><span>{formatNumber(game.positive_reviews)}</span><div className="vote-track"><i style={{ width: `${game.recommendation_rate * 100}%` }} /></div></div></td>
                 <td><div className="rate-cell"><strong>{formatPercent(game.recommendation_rate)}</strong><span className="rate-track"><i style={{ width: `${game.recommendation_rate * 100}%` }} /></span></div></td>
               </tr>

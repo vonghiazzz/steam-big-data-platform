@@ -94,6 +94,11 @@ Kafka is not the source of truth.
 
 Durable storage remains HDFS.
 
+For a local Spark run that cannot access HDFS, the historical Silver inputs can
+be redirected with `STREAM_SILVER_GAMES_PATH` and
+`STREAM_SILVER_REVIEWS_PATH`. Use local Parquet copies for these paths; the
+defaults remain the production HDFS paths.
+
 ---
 
 # Event Contract
@@ -282,7 +287,17 @@ Current Refresh Scheduler controls analytics and ML updates.
 
 # Realtime Serving
 
-Realtime outputs can be served through MongoDB.
+Realtime outputs can be served through MongoDB. The dashboard polls its combined
+batch-and-stream analytics, recent review feed, and one-hour game-metric
+endpoints every 15 seconds while Overview, Games, or Live feed is open. This
+refresh cadence applies to the UI only; the local Steam review producer currently
+polls every 5 minutes (the producer enforces a 5-minute minimum), so source data
+is near-real-time rather than instantaneous.
+The realtime review sink retains game name, genres, game type, and playtime
+features from the incremental Gold stream. Analytics APIs combine those unique
+streamed review documents with the existing batch baseline; review IDs present
+in the baseline are filtered before entering incremental Silver to prevent
+double counting.
 
 Collections:
 

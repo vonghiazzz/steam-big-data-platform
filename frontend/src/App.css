@@ -906,6 +906,14 @@ tbody tr:hover {
   font-weight: 600;
 }
 
+.volume-breakdown {
+  display: block;
+  margin-top: 3px;
+  color: #879187;
+  font-size: 8px;
+  white-space: nowrap;
+}
+
 .vote-cell {
   display: flex;
   align-items: center;
@@ -1026,6 +1034,40 @@ tbody tr:hover {
   color: #7e897f;
   font-size: 11px;
   line-height: 1.5;
+}
+
+.live-metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  padding: 16px 0;
+}
+
+.live-metric-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #e8ede3;
+  border-radius: 5px;
+  background: #fbfcf9;
+}
+
+.live-metric-card > span,
+.live-metric-card em {
+  color: #788378;
+  font-size: 10px;
+  font-style: normal;
+}
+
+.live-metric-card strong {
+  color: #253028;
+  font-size: 15px;
+}
+
+.live-metric-card small {
+  color: #7e897f;
+  font-size: 9px;
+  font-weight: 500;
 }
 
 .empty-feed {
@@ -1429,6 +1471,201 @@ tbody tr:hover {
   color: #929b92;
   font-size: 9px;
   line-height: 1.55;
+}
+
+.prediction-explanation {
+  width: 100%;
+  margin-top: 17px;
+  padding-top: 15px;
+  border-top: 1px solid #edf0e9;
+}
+
+.explanation-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.explanation-heading strong {
+  color: #344037;
+  font-size: 11px;
+}
+
+.explanation-heading span {
+  color: #788778;
+  font-size: 8px;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.explanation-note {
+  margin-top: 7px;
+  color: #899389;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.explanation-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.explanation-item-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  color: #667168;
+  font-size: 9px;
+}
+
+.explanation-item-label strong {
+  flex: 0 0 auto;
+  color: #536054;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.explanation-item-label strong.is-positive {
+  color: #5b7c28;
+}
+
+.explanation-item-label strong.is-negative {
+  color: #a25240;
+}
+
+.explanation-track {
+  position: relative;
+  height: 5px;
+  overflow: hidden;
+  margin-top: 5px;
+  border-radius: 5px;
+  background: #f0f2ed;
+}
+
+.explanation-track::after {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  content: '';
+  background: #b9c2b7;
+}
+
+.explanation-fill,
+.explanation-global-track i {
+  position: absolute;
+  top: 0;
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+}
+
+.explanation-fill.is-positive {
+  background: #a9d74a;
+}
+
+.explanation-fill.is-negative {
+  background: #d98c79;
+}
+
+.explanation-global {
+  margin-top: 19px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0e9;
+}
+
+.explanation-global-track {
+  position: relative;
+  height: 4px;
+  overflow: hidden;
+  margin-top: 5px;
+  border-radius: 4px;
+  background: #edf0e9;
+}
+
+.explanation-global-track i {
+  left: 0;
+  background: #a9d74a;
+}
+
+.explanation-what-if {
+  margin-top: 19px;
+  padding-top: 14px;
+  border-top: 1px solid #edf0e9;
+}
+
+.what-if-group {
+  margin-top: 13px;
+}
+
+.what-if-title {
+  color: #536054;
+  font-size: 9px;
+}
+
+.what-if-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 7px;
+}
+
+.what-if-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  color: #667168;
+  font-size: 9px;
+}
+
+.what-if-action {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.what-if-action:hover {
+  color: #344037;
+  text-decoration: underline;
+}
+
+.what-if-action small {
+  color: #929b92;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.what-if-item strong {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+}
+
+.what-if-item strong.is-positive {
+  color: #5b7c28;
+}
+
+.what-if-item strong.is-negative {
+  color: #a25240;
+}
+
+.what-if-details {
+  margin-top: 9px;
+}
+
+.what-if-details summary {
+  color: #71816f;
+  font-size: 9px;
+  cursor: pointer;
 }
 
 @keyframes shimmer {

@@ -111,7 +111,7 @@ def build_recent_review_document(row: Any) -> dict[str, Any]:
     appid = _integer_or_none(values.get("appid"), "appid")
     if appid is None or appid <= 0:
         raise ValueError("appid must be a positive integer")
-    return {
+    document = {
         "_id": identity,
         "recommendationid": identity,
         "appid": appid,
@@ -141,6 +141,28 @@ def build_recent_review_document(row: Any) -> dict[str, Any]:
             "stream_ingested_at",
         ),
     }
+    game_name = str(values.get("game_name") or "").strip()
+    if game_name:
+        document["game_name"] = game_name
+    for field in ("game_type", "playtime_bucket"):
+        value = values.get(field)
+        if value is not None:
+            document[field] = str(value)
+    genres = values.get("genres")
+    if genres is not None:
+        if not isinstance(genres, (list, tuple)):
+            raise TypeError("genres must be a list or tuple")
+        document["genres"] = sorted(
+            {str(genre).strip() for genre in genres if str(genre).strip()}
+        )
+    playtime_hours = values.get("playtime_hours")
+    if playtime_hours is not None:
+        if isinstance(playtime_hours, bool) or not isinstance(
+            playtime_hours, (int, float)
+        ):
+            raise TypeError("playtime_hours must be numeric or null")
+        document["playtime_hours"] = float(playtime_hours)
+    return document
 
 
 def build_realtime_metric_document(row: Any) -> dict[str, Any]:
@@ -183,7 +205,7 @@ def build_realtime_metric_document(row: Any) -> dict[str, Any]:
 def prepare_recent_reviews(streaming_silver: DataFrame) -> DataFrame:
     """Project the validated incremental Silver stream for MongoDB serving."""
     event_time = F.timestamp_seconds(F.col("timestamp_created"))
-    return streaming_silver.select(
+    review_columns: list[Any] = [
         "recommendationid",
         "appid",
         "voted_up",
@@ -191,6 +213,41 @@ def prepare_recent_reviews(streaming_silver: DataFrame) -> DataFrame:
         "playtime_forever",
         "steam_purchase",
         "received_for_free",
+    ]
+    available_columns = set(streaming_silver.columns)
+    for column in ("game_name", "genres", "playtime_hours", "playtime_bucket"):
+        if column in available_columns:
+            review_columns.append(column)
+    if "is_free" in available_columns:
+        review_columns.append(
+            F.when(F.col("is_free") == F.lit(True), F.lit("FREE"))
+            .when(F.col("is_free") == F.lit(False), F.lit("PAID"))
+            .otherwise(F.lit("UNKNOWN"))
+            .alias("game_type")
+        )
+    elif "game_type" in available_columns:
+        review_columns.append("game_type")
+    if "playtime_bucket" not in available_columns:
+        hours = F.col("playtime_at_review").cast("double") / F.lit(60.0)
+        review_columns.append(
+            F.when(
+                hours.isNull() | (hours < F.lit(0.0)),
+                F.lit(None).cast("string"),
+            )
+            .when(hours < F.lit(2.0), F.lit("0-2h"))
+            .when(hours < F.lit(10.0), F.lit("2-10h"))
+            .when(hours < F.lit(50.0), F.lit("10-50h"))
+            .otherwise(F.lit("50h+"))
+            .alias("playtime_bucket")
+        )
+    if "playtime_hours" not in available_columns:
+        review_columns.append(
+            (
+                F.col("playtime_at_review").cast("double") / F.lit(60.0)
+            ).alias("playtime_hours")
+        )
+    return streaming_silver.select(
+        *review_columns,
         event_time.alias("timestamp_created"),
         event_time.alias("event_time_ts"),
         F.current_timestamp().alias("stream_ingested_at"),

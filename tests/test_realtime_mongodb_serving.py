@@ -20,6 +20,11 @@ def review_row():
     return {
         "recommendationid": "review-123",
         "appid": 730,
+        "game_name": "Counter-Strike 2",
+        "game_type": "PAID",
+        "genres": ["Action", "FPS", "Action"],
+        "playtime_hours": 2.0,
+        "playtime_bucket": "2-10h",
         "voted_up": True,
         "playtime_at_review": 120,
         "playtime_forever": 240,
@@ -47,6 +52,11 @@ class RealtimeMongoDocumentTest(unittest.TestCase):
         document = build_recent_review_document(review_row())
         self.assertEqual(document["_id"], "review-123")
         self.assertEqual(document["_id"], document["recommendationid"])
+        self.assertEqual(document["game_name"], "Counter-Strike 2")
+        self.assertEqual(document["game_type"], "PAID")
+        self.assertEqual(document["genres"], ["Action", "FPS"])
+        self.assertEqual(document["playtime_hours"], 2.0)
+        self.assertEqual(document["playtime_bucket"], "2-10h")
 
     def test_realtime_window_id_is_deterministic(self):
         row = metric_row()
@@ -134,11 +144,36 @@ class RealtimeMongoWindowTest(unittest.TestCase):
     def test_one_hour_tumbling_window_semantics(self):
         silver = self.spark.createDataFrame(
             [
-                ("r-1", 730, True, 10, 20, True, False, 1_790_640_010),
-                ("r-2", 730, False, 30, 40, True, False, 1_790_640_020),
+                (
+                    "r-1",
+                    730,
+                    "Counter-Strike 2",
+                    ["Action", "FPS"],
+                    False,
+                    True,
+                    10,
+                    20,
+                    True,
+                    False,
+                    1_790_640_010,
+                ),
+                (
+                    "r-2",
+                    730,
+                    "Counter-Strike 2",
+                    ["Action", "FPS"],
+                    False,
+                    False,
+                    30,
+                    40,
+                    True,
+                    False,
+                    1_790_640_020,
+                ),
             ],
             """
-            recommendationid string, appid int, voted_up boolean,
+            recommendationid string, appid int, game_name string,
+            genres array<string>, is_free boolean, voted_up boolean,
             playtime_at_review int, playtime_forever int,
             steam_purchase boolean, received_for_free boolean,
             timestamp_created long
@@ -150,6 +185,20 @@ class RealtimeMongoWindowTest(unittest.TestCase):
             for row in recent.drop("event_time_ts").collect()
         ]
         self.assertEqual(len(recent_documents), 2)
+        self.assertTrue(
+            all(
+                document["game_name"] == "Counter-Strike 2"
+                for document in recent_documents
+            )
+        )
+        self.assertTrue(
+            all(
+                document["game_type"] == "PAID"
+                and document["genres"] == ["Action", "FPS"]
+                and document["playtime_bucket"] == "0-2h"
+                for document in recent_documents
+            )
+        )
         self.assertTrue(
             all(
                 isinstance(document["timestamp_created"], datetime)
